@@ -1,0 +1,34 @@
+# Binaries
+bin/
+learn
+*.exe
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+frontend/server/
+frontend/.qwik/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Go
+vendor/

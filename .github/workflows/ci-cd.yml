@@ -1,0 +1,146 @@
+# CI/CD Pipeline for Learn (learn.biswas.me)
+#
+# Production-only deployment. Push to main triggers test, build, and deploy.
+#
+# Runners:
+#   x64 runner: Prod server (31.97.102.48) — labels: self-hosted, Linux, X64, prod
+#
+# Flow:
+#   main push → test → build x64 image → push to Harbor → deploy production
+#   PR         → test only
+#
+# Required secrets:
+#   HARBOR_AUTH                    — base64("username:password") for Harbor registry
+#   SSH_PRIVATE_KEY                — raw PEM SSH key for production server
+#   LEARN_JWT_SECRET               — JWT signing secret
+#   LEARN_ADMIN_PASSWORD           — initial admin password
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ── Go Tests ───────────────────────────────────────────────────────────
+  test:
+    name: "Tests (Go)"
+    runs-on: [self-hosted, Linux, X64]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - run: go vet ./...
+
+      - name: Run tests
+        run: go test -v ./internal/...
+        timeout-minutes: 10
+
+  # ── Build x64 Image (native on prod runner) ───────────────────────────
+  build-x64:
+    name: "Build x64 Image"
+    runs-on: [self-hosted, Linux, X64, prod]
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push to Harbor
+        id: build
+        env:
+          HARBOR_AUTH: ${{ secrets.HARBOR_AUTH }}
+        run: |
+          TAG="x64-${GITHUB_SHA::7}"
+          IMAGE="harbor.biswas.me/biswas/learn"
+
+          echo "$HARBOR_AUTH" | base64 -d | cut -d: -f1 > /tmp/.hu
+          echo "$HARBOR_AUTH" | base64 -d | cut -d: -f2 > /tmp/.hp
+          docker login harbor.biswas.me -u "$(cat /tmp/.hu)" -p "$(cat /tmp/.hp)"
+          rm -f /tmp/.hu /tmp/.hp
+
+          docker build --cache-from "$IMAGE:x64-latest" -t "$IMAGE:$TAG" .
+          docker push "$IMAGE:$TAG"
+
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:$TAG" | cut -d@ -f2)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+          docker tag "$IMAGE:$TAG" "$IMAGE:x64-latest"
+          docker push "$IMAGE:x64-latest"
+
+          echo "Built and pushed $IMAGE:$TAG (x64) digest=$DIGEST"
+
+  # ── Deploy Production ──────────────────────────────────────────────────
+  deploy-production:
+    name: "Deploy to Production"
+    runs-on: [self-hosted, Linux, X64, prod]
+    needs: build-x64
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HARBOR_AUTH: ${{ secrets.HARBOR_AUTH }}
+          LEARN_JWT_SECRET: ${{ secrets.LEARN_JWT_SECRET }}
+          LEARN_ADMIN_PASSWORD: ${{ secrets.LEARN_ADMIN_PASSWORD }}
+        run: |
+          # Setup SSH
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Harbor login
+          echo "$HARBOR_AUTH" | base64 -d | cut -d: -f1 > /tmp/.hu
+          echo "$HARBOR_AUTH" | base64 -d | cut -d: -f2 > /tmp/.hp
+          docker login harbor.biswas.me -u "$(cat /tmp/.hu)" -p "$(cat /tmp/.hp)"
+          rm -f /tmp/.hu /tmp/.hp
+
+          # Pull latest and deploy
+          docker pull harbor.biswas.me/biswas/learn:x64-latest
+
+          DEPLOY_DIR="/opt/learn"
+
+          # Create env file
+          cat > /tmp/learn.env << EOF
+          LEARN_JWT_SECRET=${LEARN_JWT_SECRET}
+          LEARN_DB_PATH=/data/learn.db
+          LEARN_DRAW_DATA_DIR=/data/draw-data
+          LEARN_FRONTEND_DIST=/app/frontend/dist
+          LEARN_ADMIN_EMAIL=anshuman@biswas.me
+          LEARN_ADMIN_PASSWORD=${LEARN_ADMIN_PASSWORD}
+          EOF
+
+          # Ensure deploy dir exists
+          sudo mkdir -p ${DEPLOY_DIR}/data
+
+          # Copy compose and env
+          sudo cp docker-compose.production.yml ${DEPLOY_DIR}/docker-compose.yml
+          sudo mv /tmp/learn.env ${DEPLOY_DIR}/.env
+
+          # Deploy
+          cd ${DEPLOY_DIR}
+          sudo docker compose pull
+          sudo docker compose up -d
+
+          echo "Deployed learn to production"

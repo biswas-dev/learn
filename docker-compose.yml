@@ -1,0 +1,20 @@
+services:
+  learn:
+    build:
+      context: .
+      args:
+        VERSION: dev
+        COMMIT: local
+        BUILD_TIME: now
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      LEARN_JWT_SECRET: dev-secret-change-me
+      LEARN_DB_PATH: /data/learn.db
+      LEARN_DRAW_DATA_DIR: /data/draw-data
+      LEARN_FRONTEND_DIST: /app/frontend/dist
+      LEARN_ADMIN_EMAIL: anshuman@biswas.me
+      LEARN_ADMIN_PASSWORD: Learn2026!
+    restart: unless-stopped
