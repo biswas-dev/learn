@@ -325,9 +325,27 @@ func componentsToMarkdown(components []any) string {
 			cm, _ := compMap["content"].(map[string]any)
 			html, _ := cm["html"].(string)
 			if html != "" {
-				// Pass HTML through — go-wiki will render it
 				sb.WriteString(html)
 				sb.WriteString("\n\n")
+			}
+		case "MarkdownEditor", "markdown_editor":
+			cm, _ := compMap["content"].(map[string]any)
+			// Prefer mdHtml (rendered), fall back to text (raw markdown)
+			mdHtml, _ := cm["mdHtml"].(string)
+			text, _ := cm["text"].(string)
+			if mdHtml != "" {
+				sb.WriteString(mdHtml)
+				sb.WriteString("\n\n")
+			} else if text != "" {
+				sb.WriteString(text)
+				sb.WriteString("\n\n")
+			}
+		case "Columns", "columns":
+			cm, _ := compMap["content"].(map[string]any)
+			nested, _ := cm["comps"].([]any)
+			if len(nested) > 0 {
+				// Recursively process nested components
+				sb.WriteString(componentsToMarkdown(nested))
 			}
 		case "code", "Code":
 			cm, _ := compMap["content"].(map[string]any)
