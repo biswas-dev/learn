@@ -435,6 +435,26 @@ func componentsToMarkdown(components []any) string {
 				}
 				sb.WriteString("</figure>\n\n")
 			}
+		case "DrawIOWidget", "draw_io_widget":
+			cm, _ := compMap["content"].(map[string]any)
+			imgPath, _ := cm["path"].(string)
+			caption, _ := cm["caption"].(string)
+			width, _ := cm["width"].(float64)
+			if imgPath != "" {
+				imgURL := "https://www.educative.io" + imgPath
+				widthAttr := ""
+				if width > 0 {
+					widthAttr = fmt.Sprintf(` width="%d" style="max-width:%dpx"`, int(width), int(width))
+				}
+				if caption == "" {
+					caption = "diagram"
+				}
+				sb.WriteString(fmt.Sprintf(`<figure class="edu-image"><img src="%s" alt="%s"%s />`, imgURL, caption, widthAttr))
+				if caption != "" && caption != "diagram" {
+					sb.WriteString(fmt.Sprintf(`<figcaption>%s</figcaption>`, caption))
+				}
+				sb.WriteString("</figure>\n\n")
+			}
 		case "Notepad", "notepad":
 			cm, _ := compMap["content"].(map[string]any)
 			noteTitle, _ := cm["title"].(string)
