@@ -39,7 +39,8 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 	sectionH := &SectionHandler{store: s}
 	pageH := &PageHandler{store: s, wiki: wiki}
 	commentH := &CommentHandler{store: s}
-	importH := &ImportHandler{store: s}
+	imagesDir := filepath.Join(cfg.DrawDataDir, "..", "images")
+	importH := &ImportHandler{store: s, imagesDir: imagesDir}
 	adminH := &AdminHandler{store: s, port: cfg.Port}
 	progressH := &ProgressHandler{store: s}
 	apikeyH := &APIKeyHandler{store: s}
@@ -101,6 +102,7 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 			r.Post("/api/pages/{pageId}/versions/{versionNum}/restore", pageH.RestoreVersion)
 
 			r.Post("/api/import/course", importH.ImportCourse)
+			r.Post("/api/import/bulk", importH.BulkImport)
 		})
 
 		// Course deletion (admin only)
@@ -131,7 +133,6 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 	})
 
 	// Serve uploaded images (public)
-	imagesDir := filepath.Join(cfg.DrawDataDir, "..", "images")
 	os.MkdirAll(imagesDir, 0755)
 	r.Handle("/images/*", http.StripPrefix("/images/", http.FileServer(http.Dir(imagesDir))))
 
