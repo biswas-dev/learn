@@ -573,11 +573,58 @@ func downloadAndRewriteImages(content, imagesDir string) (string, int) {
 			continue
 		}
 
+		// Detect actual file type — educative returns SVGs for DrawIO widgets
+		actualExt := detectFileType(localPath)
+		if actualExt != "" && actualExt != ext {
+			newFilename := hash + actualExt
+			newPath := filepath.Join(imagesDir, newFilename)
+			os.Rename(localPath, newPath)
+			filename = newFilename
+		}
+
 		content = strings.ReplaceAll(content, imgURL, "/images/"+filename)
 		downloaded++
 	}
 
 	return content, downloaded
+}
+
+// detectFileType reads the first bytes of a file to determine the actual type.
+func detectFileType(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	buf := make([]byte, 512)
+	n, _ := f.Read(buf)
+	if n == 0 {
+		return ""
+	}
+	content := string(buf[:n])
+
+	// SVG detection
+	if strings.Contains(content, "<svg") || strings.Contains(content, "<?xml") && strings.Contains(content, "svg") {
+		return ".svg"
+	}
+	// PNG magic bytes
+	if n >= 4 && buf[0] == 0x89 && buf[1] == 0x50 && buf[2] == 0x4E && buf[3] == 0x47 {
+		return ".png"
+	}
+	// JPEG magic bytes
+	if n >= 2 && buf[0] == 0xFF && buf[1] == 0xD8 {
+		return ".jpg"
+	}
+	// GIF
+	if n >= 3 && string(buf[:3]) == "GIF" {
+		return ".gif"
+	}
+	// WebP
+	if n >= 12 && string(buf[:4]) == "RIFF" && string(buf[8:12]) == "WEBP" {
+		return ".webp"
+	}
+	return ""
 }
 
 func envOr(key, fallback string) string {
