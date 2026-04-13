@@ -32,3 +32,14 @@ Thumbs.db
 
 # Go
 vendor/
+
+# Debug artifacts
+*.png
+debug-*
+login-*
+frontend/tmp/
+
+# Compiled binaries (not source dirs)
+/scrape-and-import
+/debug-edu
+/server

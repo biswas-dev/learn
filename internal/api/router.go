@@ -42,6 +42,7 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 	importH := &ImportHandler{store: s}
 	adminH := &AdminHandler{store: s, port: cfg.Port}
 	progressH := &ProgressHandler{store: s}
+	apikeyH := &APIKeyHandler{store: s}
 
 	// Health + version
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +70,11 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 
 		r.Get("/api/me", authH.Me)
 		r.Post("/api/me/password", authH.ChangePassword)
+
+		// API Keys
+		r.Get("/api/api-keys", apikeyH.List)
+		r.Post("/api/api-keys", apikeyH.Create)
+		r.Delete("/api/api-keys/{keyId}", apikeyH.Delete)
 
 		// Wiki preview (editor+)
 		r.Group(func(r chi.Router) {
@@ -123,6 +129,11 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 			r.Get("/api/admin/system-info", adminH.SystemInfo)
 		})
 	})
+
+	// Serve uploaded images (public)
+	imagesDir := filepath.Join(cfg.DrawDataDir, "..", "images")
+	os.MkdirAll(imagesDir, 0755)
+	r.Handle("/images/*", http.StripPrefix("/images/", http.FileServer(http.Dir(imagesDir))))
 
 	// go-draw routes
 	if drawHandler != nil {

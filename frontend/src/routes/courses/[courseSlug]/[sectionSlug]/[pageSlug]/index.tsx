@@ -4,6 +4,7 @@ import { get, post as apiPost } from "~/lib/api";
 import type { Course, Page, Comment } from "~/lib/types";
 import { TableOfContents } from "~/components/courses/TableOfContents";
 import { PageNavigation } from "~/components/courses/PageNavigation";
+import { Lightbox, useImageLightbox } from "~/components/shared/Lightbox";
 
 export default component$(() => {
   const loc = useLocation();
@@ -15,8 +16,12 @@ export default component$(() => {
   const commentText = useSignal("");
   const commentLoading = useSignal(false);
   const showToc = useSignal(false);
+  const lightboxSrc = useSignal("");
+  const lightboxAlt = useSignal("");
 
   const { courseSlug, sectionSlug, pageSlug } = loc.params;
+
+  useImageLightbox(lightboxSrc, lightboxAlt);
 
   useVisibleTask$(({ track }) => {
     track(() => loc.params.pageSlug);
@@ -187,6 +192,7 @@ export default component$(() => {
           )}
         </article>
       </div>
+      <Lightbox src={lightboxSrc} alt={lightboxAlt} />
     </main>
   );
 });

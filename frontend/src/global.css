@@ -87,7 +87,42 @@ body {
 .ln-prose a { color: var(--color-accent); text-decoration: underline; }
 .ln-prose a:hover { color: var(--color-accent-hover); }
 .ln-prose blockquote { border-left: 3px solid var(--color-accent); padding-left: 1rem; color: var(--color-muted); margin: 1rem 0; }
-.ln-prose img { max-width: 100%; border-radius: 8px; margin: 1rem 0; }
+.ln-prose .edu-summary {
+  color: var(--color-muted);
+  border-left: 3px solid var(--color-accent);
+  padding: 0.5rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+.ln-prose figure.edu-image {
+  margin: 1.5rem auto;
+  text-align: center;
+}
+.ln-prose figure.edu-image img {
+  margin: 0 auto;
+  border: none;
+}
+.ln-prose figure.edu-image figcaption {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+.ln-prose img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 1rem auto;
+  display: block;
+  cursor: zoom-in;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid var(--color-border);
+}
+.ln-prose img:hover {
+  transform: scale(1.01);
+  box-shadow: 0 4px 20px rgba(129, 140, 248, 0.12);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+}
 .ln-prose table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
 .ln-prose th, .ln-prose td { border: 1px solid var(--color-border); padding: 0.5rem 0.75rem; text-align: left; }
 .ln-prose th { background: var(--color-elevated); font-weight: 600; }

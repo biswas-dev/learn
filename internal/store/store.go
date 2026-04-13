@@ -58,4 +58,10 @@ type Store interface {
 	// Progress
 	MarkPageComplete(ctx context.Context, userID, pageID int64) error
 	GetCourseProgress(ctx context.Context, userID, courseID int64) ([]models.Progress, error)
+
+	// API Keys
+	CreateAPIKey(ctx context.Context, key *models.APIKey) error
+	GetUserByAPIKeyHash(ctx context.Context, keyHash string) (*models.User, error)
+	ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error)
+	DeleteAPIKey(ctx context.Context, id, userID int64) error
 }

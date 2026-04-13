@@ -110,6 +110,15 @@ type Progress struct {
 	CompletedAt time.Time `json:"completed_at"`
 }
 
+type APIKey struct {
+	ID        int64  `json:"id"`
+	UserID    int64  `json:"user_id"`
+	Name      string `json:"name"`
+	KeyHash   string `json:"-"`
+	KeyPrefix string `json:"key_prefix"`
+	CreatedAt string `json:"created_at"`
+}
+
 // ImportManifest is the structure of manifest.json from go-educative output.
 type ImportManifest struct {
 	Version int                  `json:"version"`

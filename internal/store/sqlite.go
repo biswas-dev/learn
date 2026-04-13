@@ -436,6 +436,48 @@ func (s *SQLiteStore) GetCourseProgress(ctx context.Context, userID, courseID in
 	return progress, nil
 }
 
+// --- API Keys ---
+
+func (s *SQLiteStore) CreateAPIKey(ctx context.Context, k *models.APIKey) error {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO api_keys (user_id, name, key_hash, key_prefix) VALUES (?, ?, ?, ?)`,
+		k.UserID, k.Name, k.KeyHash, k.KeyPrefix)
+	if err != nil {
+		return err
+	}
+	k.ID, _ = res.LastInsertId()
+	return nil
+}
+
+func (s *SQLiteStore) GetUserByAPIKeyHash(ctx context.Context, keyHash string) (*models.User, error) {
+	return s.scanUser(s.db.QueryRowContext(ctx,
+		`SELECT u.id, u.email, u.password_hash, u.display_name, u.role, u.created_at, u.updated_at
+		 FROM users u JOIN api_keys k ON u.id = k.user_id WHERE k.key_hash = ?`, keyHash))
+}
+
+func (s *SQLiteStore) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, user_id, name, key_prefix, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var keys []models.APIKey
+	for rows.Next() {
+		k := models.APIKey{}
+		if err := rows.Scan(&k.ID, &k.UserID, &k.Name, &k.KeyPrefix, &k.CreatedAt); err != nil {
+			return nil, err
+		}
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+func (s *SQLiteStore) DeleteAPIKey(ctx context.Context, id, userID int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM api_keys WHERE id=? AND user_id=?`, id, userID)
+	return err
+}
+
 // contentHash returns a SHA-256 hash of the content for version deduplication.
 func contentHash(content string) string {
 	h := sha256.Sum256([]byte(content))
