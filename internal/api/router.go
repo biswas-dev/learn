@@ -208,10 +208,15 @@ func serveSPA(r chi.Router, distPath string) {
 			return
 		}
 
+		// Fallback: serve root index.html with q:route cleared
+		// so Qwik performs client-side routing for dynamic paths
 		indexPath := filepath.Join(absPath, "index.html")
 		if _, err := os.Stat(indexPath); err == nil {
 			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-			http.ServeFile(w, r, indexPath)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			data, _ := os.ReadFile(indexPath)
+			html := strings.Replace(string(data), `q:route="/"`, `q:route=""`, 1)
+			w.Write([]byte(html))
 			return
 		}
 
