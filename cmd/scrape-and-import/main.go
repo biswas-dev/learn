@@ -458,7 +458,10 @@ func componentsToMarkdown(components []any) string {
 			}
 			opts, _ := cm["options"].([]any)
 			for i, o := range opts {
-				sb.WriteString(fmt.Sprintf("%d. %v\n", i+1, o))
+				optStr := fmt.Sprintf("%v", o)
+				if strings.TrimSpace(optStr) != "" {
+					sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, optStr))
+				}
 			}
 			if len(opts) > 0 {
 				sb.WriteString("\n")
@@ -470,7 +473,9 @@ func componentsToMarkdown(components []any) string {
 					continue
 				}
 				qt, _ := qm["question"].(string)
-				sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, qt))
+				if strings.TrimSpace(qt) != "" {
+					sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, qt))
+				}
 			}
 			if len(qs) > 0 {
 				sb.WriteString("\n")
