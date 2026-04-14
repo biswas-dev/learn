@@ -133,6 +133,7 @@ func main() {
 			pgMap, _ := pg.(map[string]any)
 			pgTitle, _ := pgMap["title"].(string)
 			pgID := jsonStrOrFloat(pgMap, "id")
+			pgSlug, _ := pgMap["slug"].(string)
 			lessonIdx++
 
 			fmt.Printf("  [%d/%d] Scraping: %s ...", lessonIdx, totalLessons, pgTitle)
@@ -142,7 +143,7 @@ func main() {
 			time.Sleep(delay)
 
 			// Fetch lesson content via HTTP
-			content := fetchLesson(authorID, collectionID, pgID)
+			content := fetchLesson(authorID, collectionID, pgID, pgSlug)
 			if content == "" {
 				fmt.Println(" FAILED (empty)")
 				continue
@@ -262,7 +263,7 @@ func discoverIDsViaAPI(courseURL string) (string, string) {
 	return "", ""
 }
 
-func fetchLesson(authorID, collectionID, pageID string) string {
+func fetchLesson(authorID, collectionID, pageID, pageSlug string) string {
 	url := fmt.Sprintf("https://www.educative.io/api/collection/%s/%s/page/%s?work_type=collection",
 		authorID, collectionID, pageID)
 
@@ -288,6 +289,9 @@ func fetchLesson(authorID, collectionID, pageID string) string {
 		}
 		return ""
 	}
+
+	// Resolve LazyLoadPlaceholder components with MxGraphWidget
+	components = resolveLazyLoads(components, pageSlug)
 
 	// Extract summary description if present
 	var descriptionHTML string
@@ -435,25 +439,59 @@ func componentsToMarkdown(components []any) string {
 				}
 				sb.WriteString("</figure>\n\n")
 			}
+		case "MxGraphWidget", "mx_graph_widget":
+			cm, _ := compMap["content"].(map[string]any)
+			xml, _ := cm["xml"].(string)
+			caption, _ := cm["caption"].(string)
+			if xml != "" {
+				localPath := mxGraphToPNG(xml, caption)
+				if localPath != "" {
+					if caption == "" {
+						caption = "diagram"
+					}
+					sb.WriteString(fmt.Sprintf(`<figure class="edu-image"><img src="%s" alt="%s" />`, localPath, caption))
+					if caption != "" && caption != "diagram" {
+						sb.WriteString(fmt.Sprintf(`<figcaption>%s</figcaption>`, caption))
+					}
+					sb.WriteString("</figure>\n\n")
+				}
+			}
 		case "DrawIOWidget", "draw_io_widget":
 			cm, _ := compMap["content"].(map[string]any)
-			imgPath, _ := cm["path"].(string)
-			caption, _ := cm["caption"].(string)
-			width, _ := cm["width"].(float64)
-			if imgPath != "" {
-				imgURL := "https://www.educative.io" + imgPath
-				widthAttr := ""
-				if width > 0 {
-					widthAttr = fmt.Sprintf(` width="%d" style="max-width:%dpx"`, int(width), int(width))
+			// Try XML first (same as MxGraphWidget), fall back to image path
+			xml, _ := cm["xml"].(string)
+			if xml != "" {
+				caption, _ := cm["caption"].(string)
+				localPath := mxGraphToPNG(xml, caption)
+				if localPath != "" {
+					if caption == "" {
+						caption = "diagram"
+					}
+					sb.WriteString(fmt.Sprintf(`<figure class="edu-image"><img src="%s" alt="%s" />`, localPath, caption))
+					if caption != "" && caption != "diagram" {
+						sb.WriteString(fmt.Sprintf(`<figcaption>%s</figcaption>`, caption))
+					}
+					sb.WriteString("</figure>\n\n")
 				}
-				if caption == "" {
-					caption = "diagram"
+			} else {
+				imgPath, _ := cm["path"].(string)
+				caption, _ := cm["caption"].(string)
+				width, _ := cm["width"].(float64)
+				if imgPath != "" {
+					imgURL := "https://www.educative.io" + imgPath
+					widthAttr := ""
+					if width > 0 {
+						widthAttr = fmt.Sprintf(` width="%d" style="max-width:%dpx"`, int(width), int(width))
+					}
+					if caption == "" {
+						caption = "diagram"
+					}
+					sb.WriteString(fmt.Sprintf(`<figure class="edu-image"><img src="%s" alt="%s"%s />`, imgURL, caption, widthAttr))
+					if caption != "" && caption != "diagram" {
+						sb.WriteString(fmt.Sprintf(`<figcaption>%s</figcaption>`, caption))
+					}
+					sb.WriteString("</figure>\n\n")
 				}
-				sb.WriteString(fmt.Sprintf(`<figure class="edu-image"><img src="%s" alt="%s"%s />`, imgURL, caption, widthAttr))
-				if caption != "" && caption != "diagram" {
-					sb.WriteString(fmt.Sprintf(`<figcaption>%s</figcaption>`, caption))
-				}
-				sb.WriteString("</figure>\n\n")
 			}
 		case "Notepad", "notepad":
 			cm, _ := compMap["content"].(map[string]any)
@@ -473,6 +511,168 @@ func componentsToMarkdown(components []any) string {
 		}
 	}
 	return sb.String()
+}
+
+// mxGraphToPNG converts MxGraph XML to a PNG image using draw.io CLI,
+// saves it to the images directory, and returns the /images/... path.
+func mxGraphToPNG(xml, caption string) string {
+	imagesDir := envOr("LEARN_IMAGES_DIR", "data/images")
+
+	// Hash the XML for a stable filename
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(xml)))[:12]
+	filename := hash + ".png"
+	localPath := filepath.Join(imagesDir, filename)
+
+	// Skip if already converted
+	if _, err := os.Stat(localPath); err == nil {
+		return "/images/" + filename
+	}
+
+	// Wrap in mxfile/diagram structure if needed (draw.io CLI requires it)
+	if !strings.Contains(xml, "<mxfile") {
+		xml = `<mxfile><diagram name="Page-1">` + xml + `</diagram></mxfile>`
+	}
+
+	// Write XML to temp .drawio file
+	tmpFile := filepath.Join(os.TempDir(), hash+".drawio")
+	if err := os.WriteFile(tmpFile, []byte(xml), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "\n    mxGraph: failed to write temp file: %v", err)
+		return ""
+	}
+	defer os.Remove(tmpFile)
+
+	// Export via draw.io CLI
+	cmd := exec.Command("/opt/homebrew/bin/drawio", "--export", "--format", "png",
+		"--scale", "2", "--output", localPath, tmpFile)
+	cmd.Env = append(os.Environ(), "ELECTRON_DISABLE_GPU=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\n    mxGraph: draw.io export failed: %v: %s", err, string(out))
+		return ""
+	}
+
+	// Verify output
+	info, err := os.Stat(localPath)
+	if err != nil || info.Size() < 100 {
+		os.Remove(localPath)
+		fmt.Fprintf(os.Stderr, "\n    mxGraph: output too small or missing")
+		return ""
+	}
+
+	return "/images/" + filename
+}
+
+// resolveLazyLoads checks for LazyLoadPlaceholder components with MxGraphWidget
+// and resolves them by fetching the HTML page to extract the MxGraph XML.
+func resolveLazyLoads(components []any, pageSlug string) []any {
+	// Count lazy MxGraphWidgets
+	lazyCount := 0
+	for _, comp := range components {
+		cm, _ := comp.(map[string]any)
+		if cm["type"] == "LazyLoadPlaceholder" {
+			content, _ := cm["content"].(map[string]any)
+			if at, _ := content["actualType"].(string); at == "MxGraphWidget" {
+				lazyCount++
+			}
+		}
+	}
+	if lazyCount == 0 {
+		return components
+	}
+
+	// Collect MxGraph XMLs already present in the API response (from Columns etc.)
+	knownXMLs := collectMxGraphXMLs(components)
+
+	// Fetch the lesson HTML page to extract lazy-loaded MxGraph XMLs
+	// Construct lesson URL from course URL + page slug
+	lessonURL := strings.TrimRight(courseURL, "/") + "/" + pageSlug
+	cmd := exec.Command("curl", "-s", lessonURL,
+		"-H", "Cookie: "+eduCookie,
+		"-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+	)
+	body, err := cmd.Output()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\n    resolveLazy: curl failed: %v", err)
+		return components
+	}
+
+	// Extract all unique mxGraphModel XML blocks
+	htmlStr := string(body)
+	htmlStr = strings.ReplaceAll(htmlStr, `\u003c`, "<")
+	htmlStr = strings.ReplaceAll(htmlStr, `\u003e`, ">")
+	htmlStr = strings.ReplaceAll(htmlStr, `\u0026`, "&")
+
+	re := regexp.MustCompile(`<mxGraphModel>.*?</mxGraphModel>`)
+	matches := re.FindAllString(htmlStr, -1)
+
+	// Unescape and deduplicate
+	var uniqueXMLs []string
+	seen := make(map[string]bool)
+	for _, m := range matches {
+		m = strings.ReplaceAll(m, `\"`, `"`)
+		m = strings.ReplaceAll(m, `\\`, `\`)
+		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(m)))[:16]
+		if !seen[hash] {
+			seen[hash] = true
+			// Skip if this XML is already known from the API (Columns etc.)
+			if !knownXMLs[hash] {
+				uniqueXMLs = append(uniqueXMLs, m)
+			}
+		}
+	}
+
+	if len(uniqueXMLs) == 0 {
+		return components
+	}
+
+	// Replace LazyLoadPlaceholders with resolved MxGraphWidgets
+	xmlIdx := 0
+	result := make([]any, len(components))
+	for i, comp := range components {
+		cm, _ := comp.(map[string]any)
+		if cm["type"] == "LazyLoadPlaceholder" {
+			content, _ := cm["content"].(map[string]any)
+			if at, _ := content["actualType"].(string); at == "MxGraphWidget" && xmlIdx < len(uniqueXMLs) {
+				result[i] = map[string]any{
+					"type": "MxGraphWidget",
+					"content": map[string]any{
+						"xml":     uniqueXMLs[xmlIdx],
+						"caption": "",
+					},
+				}
+				xmlIdx++
+				continue
+			}
+		}
+		result[i] = comp
+	}
+	return result
+}
+
+// collectMxGraphXMLs recursively collects hashes of MxGraph XMLs already in the components.
+func collectMxGraphXMLs(components []any) map[string]bool {
+	known := make(map[string]bool)
+	for _, comp := range components {
+		cm, _ := comp.(map[string]any)
+		if cm == nil {
+			continue
+		}
+		switch cm["type"] {
+		case "MxGraphWidget", "mx_graph_widget":
+			content, _ := cm["content"].(map[string]any)
+			if xml, ok := content["xml"].(string); ok && xml != "" {
+				hash := fmt.Sprintf("%x", sha256.Sum256([]byte(xml)))[:16]
+				known[hash] = true
+			}
+		case "Columns", "columns":
+			content, _ := cm["content"].(map[string]any)
+			nested, _ := content["comps"].([]any)
+			for k, v := range collectMxGraphXMLs(nested) {
+				known[k] = v
+			}
+		}
+	}
+	return known
 }
 
 func learnPost(path string, body map[string]any) map[string]any {

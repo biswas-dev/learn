@@ -132,9 +132,9 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 		})
 	})
 
-	// Serve uploaded images (public)
+	// Serve uploaded images (public) — serves .svg.gz with Content-Encoding: gzip
 	os.MkdirAll(imagesDir, 0755)
-	r.Handle("/images/*", http.StripPrefix("/images/", http.FileServer(http.Dir(imagesDir))))
+	r.Handle("/images/*", http.StripPrefix("/images/", compressedImageServer(imagesDir)))
 
 	// go-draw routes
 	if drawHandler != nil {

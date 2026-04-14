@@ -39,6 +39,11 @@ func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
+// DB returns the underlying *sql.DB for migration scripts.
+func (s *SQLiteStore) DB() *sql.DB {
+	return s.db
+}
+
 // --- Users ---
 
 func (s *SQLiteStore) CreateUser(ctx context.Context, u *models.User) error {
@@ -244,7 +249,7 @@ func (s *SQLiteStore) ListSections(ctx context.Context, courseID int64) ([]model
 func (s *SQLiteStore) CreatePage(ctx context.Context, p *models.Page) error {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO pages (section_id, title, slug, content, sort_order, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
-		p.SectionID, p.Title, p.Slug, p.Content, p.SortOrder, p.CreatedBy)
+		p.SectionID, p.Title, p.Slug, CompressContent(p.Content), p.SortOrder, p.CreatedBy)
 	if err != nil {
 		return err
 	}
@@ -260,6 +265,9 @@ func (s *SQLiteStore) GetPageByID(ctx context.Context, id int64) (*models.Page, 
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	if err == nil {
+		p.Content, err = DecompressContent(p.Content)
+	}
 	return p, err
 }
 
@@ -270,6 +278,9 @@ func (s *SQLiteStore) GetPageBySlug(ctx context.Context, sectionID int64, slug s
 		Scan(&p.ID, &p.SectionID, &p.Title, &p.Slug, &p.Content, &p.SortOrder, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
+	}
+	if err == nil {
+		p.Content, err = DecompressContent(p.Content)
 	}
 	return p, err
 }
@@ -283,7 +294,7 @@ func (s *SQLiteStore) UpdatePage(ctx context.Context, p *models.Page) error {
 
 func (s *SQLiteStore) UpdatePageContent(ctx context.Context, id int64, content string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE pages SET content=?, updated_at=datetime('now') WHERE id=?`, content, id)
+		`UPDATE pages SET content=?, updated_at=datetime('now') WHERE id=?`, CompressContent(content), id)
 	return err
 }
 
@@ -315,7 +326,7 @@ func (s *SQLiteStore) ListPages(ctx context.Context, sectionID int64) ([]models.
 func (s *SQLiteStore) CreatePageVersion(ctx context.Context, v *models.PageVersion) error {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO page_versions (page_id, version_number, content, content_hash, created_by) VALUES (?, ?, ?, ?, ?)`,
-		v.PageID, v.VersionNumber, v.Content, v.ContentHash, v.CreatedBy)
+		v.PageID, v.VersionNumber, CompressContent(v.Content), v.ContentHash, v.CreatedBy)
 	if err != nil {
 		return err
 	}
@@ -348,6 +359,9 @@ func (s *SQLiteStore) GetPageVersion(ctx context.Context, pageID int64, versionN
 		Scan(&v.ID, &v.PageID, &v.VersionNumber, &v.Content, &v.ContentHash, &v.CreatedBy, &v.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
+	}
+	if err == nil {
+		v.Content, err = DecompressContent(v.Content)
 	}
 	return v, err
 }

@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -43,6 +47,12 @@ func main() {
 			return
 		case "list-users":
 			cliListUsers()
+			return
+		case "compress-content":
+			cliCompressContent()
+			return
+		case "compress-images":
+			cliCompressImages()
 			return
 		}
 	}
@@ -233,6 +243,124 @@ func cliListUsers() {
 	if len(users) == 0 {
 		log.Warn().Msg("no users found, run: learn create-admin <email> <password>")
 	}
+}
+
+func cliCompressContent() {
+	db := openDB()
+	defer db.Close()
+	ctx := context.Background()
+
+	// Compress all page content that isn't already compressed
+	rows, err := db.(*store.SQLiteStore).DB().QueryContext(ctx,
+		`SELECT id, content FROM pages WHERE content != '' AND content NOT LIKE 'zlib:%'`)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to query pages")
+	}
+	var updates []struct{ id int64; compressed string }
+	for rows.Next() {
+		var id int64
+		var content string
+		if err := rows.Scan(&id, &content); err != nil {
+			log.Fatal().Err(err).Msg("scan error")
+		}
+		compressed := store.CompressContent(content)
+		if compressed != content {
+			updates = append(updates, struct{ id int64; compressed string }{id, compressed})
+		}
+	}
+	rows.Close()
+
+	for _, u := range updates {
+		if _, err := db.(*store.SQLiteStore).DB().ExecContext(ctx,
+			`UPDATE pages SET content=? WHERE id=?`, u.compressed, u.id); err != nil {
+			log.Error().Err(err).Int64("id", u.id).Msg("failed to compress page")
+			continue
+		}
+	}
+	log.Info().Int("pages", len(updates)).Msg("pages compressed")
+
+	// Compress page versions
+	vrows, err := db.(*store.SQLiteStore).DB().QueryContext(ctx,
+		`SELECT id, content FROM page_versions WHERE content != '' AND content NOT LIKE 'zlib:%'`)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to query versions")
+	}
+	var vupdates []struct{ id int64; compressed string }
+	for vrows.Next() {
+		var id int64
+		var content string
+		if err := vrows.Scan(&id, &content); err != nil {
+			log.Fatal().Err(err).Msg("scan error")
+		}
+		compressed := store.CompressContent(content)
+		if compressed != content {
+			vupdates = append(vupdates, struct{ id int64; compressed string }{id, compressed})
+		}
+	}
+	vrows.Close()
+
+	for _, u := range vupdates {
+		if _, err := db.(*store.SQLiteStore).DB().ExecContext(ctx,
+			`UPDATE page_versions SET content=? WHERE id=?`, u.compressed, u.id); err != nil {
+			log.Error().Err(err).Int64("id", u.id).Msg("failed to compress version")
+			continue
+		}
+	}
+	log.Info().Int("versions", len(vupdates)).Msg("versions compressed")
+
+	// VACUUM to reclaim space
+	if _, err := db.(*store.SQLiteStore).DB().ExecContext(ctx, `VACUUM`); err != nil {
+		log.Warn().Err(err).Msg("vacuum failed")
+	}
+	log.Info().Msg("done")
+}
+
+func cliCompressImages() {
+	imagesDir := os.Getenv("LEARN_IMAGES_DIR")
+	if imagesDir == "" {
+		imagesDir = "data/images"
+	}
+
+	entries, err := os.ReadDir(imagesDir)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to read images dir")
+	}
+
+	compressed := 0
+	var savedBytes int64
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".svg") {
+			continue
+		}
+		svgPath := filepath.Join(imagesDir, e.Name())
+		gzPath := svgPath + ".gz"
+
+		// Skip if already compressed
+		if _, err := os.Stat(gzPath); err == nil {
+			continue
+		}
+
+		data, err := os.ReadFile(svgPath)
+		if err != nil {
+			continue
+		}
+
+		var buf bytes.Buffer
+		gz, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		gz.Write(data)
+		gz.Close()
+
+		if err := os.WriteFile(gzPath, buf.Bytes(), 0644); err != nil {
+			continue
+		}
+
+		savedBytes += int64(len(data)) - int64(buf.Len())
+		compressed++
+
+		// Remove the original uncompressed SVG
+		os.Remove(svgPath)
+	}
+	log.Info().Int("files", compressed).Int64("saved_mb", savedBytes/1024/1024).Msg("SVGs compressed")
 }
 
 func argOr(args []string, idx int, fallback string) string {
