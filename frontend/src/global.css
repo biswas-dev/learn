@@ -40,6 +40,15 @@ body {
   background: rgba(255, 255, 255, 0.14);
 }
 
+/* ─── KaTeX math rendering ──────────── */
+
+/* Hide the MathML source (screen readers use it, visual users see katex-html) */
+.katex-mathml { display: none; }
+
+/* Ensure KaTeX inline math doesn't break across lines awkwardly */
+.katex { white-space: nowrap; }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.5em 0; }
+
 /* ─── Animations ────────────────────── */
 
 @keyframes ln-fade-in {
