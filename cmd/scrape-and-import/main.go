@@ -186,6 +186,10 @@ func main() {
 			"title":      sec.title,
 			"sort_order": secIdx,
 		})
+		if secResp["id"] == nil {
+			fmt.Fprintf(os.Stderr, "\nFailed to create section %q: %v\n", sec.title, secResp)
+			continue
+		}
 		sectionID := int64(secResp["id"].(float64))
 		fmt.Printf("## %s (section_id=%d)\n", sec.title, sectionID)
 

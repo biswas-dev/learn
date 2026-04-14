@@ -45,9 +45,21 @@ body {
 /* Hide the MathML source (screen readers use it, visual users see katex-html) */
 .katex-mathml { display: none; }
 
-/* Ensure KaTeX inline math doesn't break across lines awkwardly */
+/* Inline math */
 .katex { white-space: nowrap; }
-.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.5em 0; }
+
+/* Display (block) math — large formulas */
+.katex-display { display: block; overflow-x: auto; overflow-y: hidden; padding: 0.5em 0; text-align: center; }
+.katex-display > .katex { display: inline-block; white-space: normal; text-align: left; }
+
+/* Auto-promote large inline KaTeX to block display when they contain cases/matrices */
+.ln-prose .katex:has(.vlist-t2), .ln-prose .katex:has(.mfrac) {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: normal;
+  vertical-align: middle;
+}
 
 /* ─── Animations ────────────────────── */
 
