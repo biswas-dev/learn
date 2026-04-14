@@ -112,6 +112,8 @@ jobs:
           B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
           B2_APP_KEY: ${{ secrets.B2_APP_KEY }}
           B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
         run: |
           # Setup SSH
           mkdir -p ~/.ssh
@@ -129,8 +131,8 @@ jobs:
 
           DEPLOY_DIR="/opt/learn"
 
-          # Create env file
-          cat > /tmp/learn.env << EOF
+          # Create env file (no leading whitespace!)
+          cat > /tmp/learn.env <<ENVEOF
           LEARN_JWT_SECRET=${LEARN_JWT_SECRET}
           LEARN_DB_PATH=/data/learn.db
           LEARN_DRAW_DATA_DIR=/data/draw-data
@@ -142,7 +144,8 @@ jobs:
           LEARN_S3_KEY_ID=${B2_KEY_ID}
           LEARN_S3_APP_KEY=${B2_APP_KEY}
           LEARN_S3_BUCKET=${B2_BUCKET}
-          EOF
+          ENVEOF
+          sed -i 's/^[[:space:]]*//' /tmp/learn.env
 
           # Ensure deploy dir exists
           sudo mkdir -p ${DEPLOY_DIR}/data
@@ -155,5 +158,14 @@ jobs:
           cd ${DEPLOY_DIR}
           sudo docker compose pull
           sudo docker compose up -d
+
+          # Purge Cloudflare cache
+          if [ -n "$CF_API_TOKEN" ] && [ -n "$CF_ZONE_ID" ]; then
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d '{"hosts":["learn.biswas.me"]}'
+            echo "Cloudflare cache purged"
+          fi
 
           echo "Deployed learn to production"
