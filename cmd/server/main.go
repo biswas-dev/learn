@@ -26,7 +26,7 @@ func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
 	log.Logger = zerolog.New(os.Stderr).With().Timestamp().Logger()
 
-	// CLI subcommands before starting server
+	// CLI subcommands — these only need the DB, not the full server config
 	if len(os.Args) >= 2 {
 		switch os.Args[1] {
 		case "create-admin":
@@ -47,6 +47,7 @@ func main() {
 		}
 	}
 
+	// --- Server startup below (requires full config) ---
 	info := version.Get()
 	log.Info().Str("version", info.Version).Str("commit", info.GitCommit).Msg("starting learn")
 
