@@ -2,7 +2,7 @@ services:
   learn:
     image: harbor.biswas.me/biswas/learn:latest
     ports:
-      - "13426:8080"
+      - "13427:8080"
     volumes:
       - ./data:/data
     env_file:
