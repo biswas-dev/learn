@@ -116,54 +116,113 @@ func main() {
 	}
 	fmt.Printf("Found %d chapters, %d total lessons\n\n", len(categories), totalLessons)
 
+	// ── Pass 1: Fetch all pages via API and identify those needing Playwright ──
+	type pageData struct {
+		secIdx, pgIdx int
+		title, slug   string
+		content       string // raw HTML after component processing
+		needsBrowser  bool   // true if has unresolved LazyLoadPlaceholders
+	}
+	type sectionData struct {
+		title string
+		pages []pageData
+	}
+	var sections []sectionData
+	var browserSlugs []string
+
 	lessonIdx := 0
 	for secIdx, cat := range categories {
 		catMap, _ := cat.(map[string]any)
 		chTitle, _ := catMap["title"].(string)
+		sec := sectionData{title: chTitle}
 
-		secResp := learnPost(fmt.Sprintf("/api/courses/%d/sections", courseID), map[string]any{
-			"title":      chTitle,
-			"sort_order": secIdx,
-		})
-		sectionID := int64(secResp["id"].(float64))
-		fmt.Printf("## %s (section_id=%d)\n", chTitle, sectionID)
-
-		pages, _ := catMap["pages"].([]any)
-		for pgIdx, pg := range pages {
+		catPages, _ := catMap["pages"].([]any)
+		for pgIdx, pg := range catPages {
 			pgMap, _ := pg.(map[string]any)
 			pgTitle, _ := pgMap["title"].(string)
 			pgID := jsonStrOrFloat(pgMap, "id")
 			pgSlug, _ := pgMap["slug"].(string)
 			lessonIdx++
 
-			fmt.Printf("  [%d/%d] Scraping: %s ...", lessonIdx, totalLessons, pgTitle)
+			fmt.Printf("  [%d/%d] Fetching: %s ...", lessonIdx, totalLessons, pgTitle)
 
 			// Rate limit: 2-4 second delay
 			delay := 2*time.Second + time.Duration(rand.Int63n(int64(2*time.Second)))
 			time.Sleep(delay)
 
-			// Fetch lesson content via HTTP
 			content := fetchLesson(authorID, collectionID, pgID, pgSlug)
 			if content == "" {
-				fmt.Println(" FAILED (empty)")
+				fmt.Println(" EMPTY")
+				sec.pages = append(sec.pages, pageData{secIdx: secIdx, pgIdx: pgIdx, title: pgTitle, slug: pgSlug})
 				continue
 			}
 
-			// Download images and rewrite URLs
-			content, imgCount := downloadAndRewriteImages(content, imagesDir)
-
-			learnPost(fmt.Sprintf("/api/sections/%d/pages", sectionID), map[string]any{
-				"title":      pgTitle,
-				"content":    content,
-				"sort_order": pgIdx,
-			})
+			// Check if content still has unresolved LazyLoadPlaceholder markers
+			// (fetchLesson tries HTML extraction, but if it fails, content has no images from those)
+			needsBrowser := false
+			// We detect this by checking if the API had lazy loads that weren't resolved
+			// Simple heuristic: if fetchLesson's resolveLazyLoads found 0 XML and there were lazy placeholders
+			if strings.Contains(content, "<!-- lazy-unresolved -->") {
+				needsBrowser = true
+				browserSlugs = append(browserSlugs, pgSlug)
+			}
 
 			wordCount := len(strings.Fields(content))
+			fmt.Printf(" OK (%d words)\n", wordCount)
+			sec.pages = append(sec.pages, pageData{secIdx: secIdx, pgIdx: pgIdx, title: pgTitle, slug: pgSlug, content: content, needsBrowser: needsBrowser})
+		}
+		sections = append(sections, sec)
+	}
+
+	// ── Pass 2: Batch Playwright extraction for pages that need it ──
+	var playwrightResults map[string][]string
+	if len(browserSlugs) > 0 {
+		fmt.Printf("\nExtracting diagrams via browser for %d pages...\n", len(browserSlugs))
+		playwrightResults = batchPlaywrightExtract(browserSlugs, imagesDir)
+		fmt.Printf("Browser extraction complete: %d pages processed\n\n", len(playwrightResults))
+	}
+
+	// ── Pass 3: Upload all pages to learn ──
+	lessonIdx = 0
+	for secIdx, sec := range sections {
+		secResp := learnPost(fmt.Sprintf("/api/courses/%d/sections", courseID), map[string]any{
+			"title":      sec.title,
+			"sort_order": secIdx,
+		})
+		sectionID := int64(secResp["id"].(float64))
+		fmt.Printf("## %s (section_id=%d)\n", sec.title, sectionID)
+
+		for _, pg := range sec.pages {
+			lessonIdx++
+			content := pg.content
+
+			// Inject Playwright-extracted images for pages that needed browser
+			if pg.needsBrowser && playwrightResults != nil {
+				if imgs, ok := playwrightResults[pg.slug]; ok && len(imgs) > 0 {
+					// Append images at the positions where LazyLoadPlaceholders were
+					content = strings.ReplaceAll(content, "<!-- lazy-unresolved -->", "")
+					for _, imgPath := range imgs {
+						content += fmt.Sprintf("\n\n"+`<figure class="edu-image"><img src="%s" alt="diagram" /></figure>`, imgPath)
+					}
+				}
+			}
+
+			// Download external images and rewrite URLs
+			content, imgCount := downloadAndRewriteImages(content, imagesDir)
+
+			fmt.Printf("  [%d/%d] Uploading: %s", lessonIdx, totalLessons, pg.title)
+
+			learnPost(fmt.Sprintf("/api/sections/%d/pages", sectionID), map[string]any{
+				"title":      pg.title,
+				"content":    content,
+				"sort_order": pg.pgIdx,
+			})
+
 			imgInfo := ""
 			if imgCount > 0 {
 				imgInfo = fmt.Sprintf(", %d imgs", imgCount)
 			}
-			fmt.Printf(" OK (%d words%s)\n", wordCount, imgInfo)
+			fmt.Printf(" OK (%d words%s)\n", len(strings.Fields(content)), imgInfo)
 		}
 	}
 
@@ -503,6 +562,11 @@ func componentsToMarkdown(components []any) string {
 			if placeholder != "" {
 				sb.WriteString(fmt.Sprintf("> _%s_\n\n", placeholder))
 			}
+		case "unresolved_marker":
+			if content, ok := compMap["content"].(string); ok {
+				sb.WriteString(content)
+				sb.WriteString("\n\n")
+			}
 		default:
 			if content, ok := compMap["content"].(string); ok && content != "" {
 				sb.WriteString(content)
@@ -622,7 +686,25 @@ func resolveLazyLoads(components []any, pageSlug string) []any {
 	}
 
 	if len(uniqueXMLs) == 0 {
-		return components
+		// Mark unresolved — the batch Playwright pass will handle these later
+		result := make([]any, len(components))
+		copy(result, components)
+		// Insert a marker in the first LazyLoadPlaceholder so the caller knows
+		for i, comp := range result {
+			cm, _ := comp.(map[string]any)
+			if cm["type"] == "LazyLoadPlaceholder" {
+				content, _ := cm["content"].(map[string]any)
+				if at, _ := content["actualType"].(string); at == "MxGraphWidget" {
+					result[i] = map[string]any{
+						"type":    "unresolved_marker",
+						"content": "<!-- lazy-unresolved -->",
+					}
+					// Only mark once — the batch extractor will provide all images for the page
+					break
+				}
+			}
+		}
+		return result
 	}
 
 	// Replace LazyLoadPlaceholders with resolved MxGraphWidgets
@@ -647,6 +729,108 @@ func resolveLazyLoads(components []any, pageSlug string) []any {
 		result[i] = comp
 	}
 	return result
+}
+
+// batchPlaywrightExtract uses Playwright to extract image URLs from educative pages,
+// then downloads each image via curl. ONE browser session for all pages.
+// Returns map[pageSlug][]localImagePaths.
+func batchPlaywrightExtract(pageSlugs []string, imagesDir string) map[string][]string {
+	scriptDir := envOr("LEARN_PROJECT_DIR", ".")
+	scriptPath, _ := filepath.Abs(filepath.Join(scriptDir, "scripts", "extract-mxgraph.js"))
+	frontendDir, _ := filepath.Abs(filepath.Join(scriptDir, "frontend"))
+
+	if _, err := os.Stat(scriptPath); err != nil {
+		fmt.Fprintf(os.Stderr, "playwright: script not found at %s\n", scriptPath)
+		return nil
+	}
+
+	cookieFile := envOr("EDU_COOKIE_FILE", os.Getenv("HOME")+"/.config/go-educative/cookie.txt")
+
+	// Write input JSON
+	input := map[string]any{
+		"course_url": courseURL,
+		"pages":      pageSlugs,
+	}
+	inputData, _ := json.Marshal(input)
+	tmpFile := filepath.Join(os.TempDir(), "playwright-pages.json")
+	os.WriteFile(tmpFile, inputData, 0644)
+	defer os.Remove(tmpFile)
+
+	cmd := exec.Command("node", scriptPath, tmpFile)
+	cmd.Dir = frontendDir
+	cmd.Env = append(os.Environ(),
+		"NODE_PATH="+filepath.Join(frontendDir, "node_modules"),
+		"COOKIE_FILE="+cookieFile,
+	)
+	cmd.Stderr = os.Stderr
+
+	out, err := cmd.Output()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "playwright: failed: %v\n", err)
+		return nil
+	}
+
+	// Parse URL map from last line of stdout
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var jsonLine string
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "{") {
+			jsonLine = strings.TrimSpace(lines[i])
+			break
+		}
+	}
+	if jsonLine == "" {
+		return nil
+	}
+
+	var urlMap map[string][]string
+	if err := json.Unmarshal([]byte(jsonLine), &urlMap); err != nil {
+		fmt.Fprintf(os.Stderr, "playwright: failed to parse output: %v\n", err)
+		return nil
+	}
+
+	// Download each image via curl and return local paths
+	results := make(map[string][]string)
+	totalDownloaded := 0
+	for slug, urls := range urlMap {
+		var localPaths []string
+		for _, u := range urls {
+			imgURL := "https://www.educative.io" + u
+			// Hash the URL for filename
+			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(u)))[:12]
+			ext := ".svg"
+			filename := hash + ext
+			localPath := filepath.Join(imagesDir, filename)
+
+			// Skip if already downloaded
+			if _, err := os.Stat(localPath); err == nil {
+				localPaths = append(localPaths, "/images/"+filename)
+				continue
+			}
+
+			// Download via curl
+			dlCmd := exec.Command("curl", "-s", "-o", localPath, imgURL,
+				"-H", "Cookie: "+eduCookie,
+				"-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+			)
+			if err := dlCmd.Run(); err != nil {
+				continue
+			}
+
+			// Verify file
+			info, err := os.Stat(localPath)
+			if err != nil || info.Size() < 100 {
+				os.Remove(localPath)
+				continue
+			}
+
+			localPaths = append(localPaths, "/images/"+filename)
+			totalDownloaded++
+		}
+		results[slug] = localPaths
+	}
+	fmt.Printf("  Downloaded %d diagram images\n", totalDownloaded)
+	return results
 }
 
 // collectMxGraphXMLs recursively collects hashes of MxGraph XMLs already in the components.
