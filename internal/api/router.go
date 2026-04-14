@@ -10,6 +10,7 @@ import (
 
 	gowiki "github.com/anchoo2kewl/go-wiki"
 	"github.com/biswas-dev/learn/internal/config"
+	"github.com/biswas-dev/learn/internal/images"
 	"github.com/biswas-dev/learn/internal/models"
 	"github.com/biswas-dev/learn/internal/store"
 	"github.com/biswas-dev/learn/internal/version"
@@ -18,7 +19,7 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler http.Handler) http.Handler {
+func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler http.Handler, imgStore images.Store) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -39,8 +40,7 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 	sectionH := &SectionHandler{store: s}
 	pageH := &PageHandler{store: s, wiki: wiki}
 	commentH := &CommentHandler{store: s}
-	imagesDir := filepath.Join(cfg.DrawDataDir, "..", "images")
-	importH := &ImportHandler{store: s, imagesDir: imagesDir}
+	importH := &ImportHandler{store: s, imgStore: imgStore}
 	adminH := &AdminHandler{store: s, port: cfg.Port}
 	progressH := &ProgressHandler{store: s}
 	apikeyH := &APIKeyHandler{store: s}
@@ -132,9 +132,8 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 		})
 	})
 
-	// Serve uploaded images (public) — serves .svg.gz with Content-Encoding: gzip
-	os.MkdirAll(imagesDir, 0755)
-	r.Handle("/images/*", http.StripPrefix("/images/", compressedImageServer(imagesDir)))
+	// Serve uploaded images (public)
+	r.Handle("/images/*", imgStore.Handler("/images/"))
 
 	// go-draw routes
 	if drawHandler != nil {

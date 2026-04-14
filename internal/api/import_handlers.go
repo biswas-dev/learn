@@ -6,17 +6,17 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/biswas-dev/learn/internal/images"
 	"github.com/biswas-dev/learn/internal/models"
 	"github.com/biswas-dev/learn/internal/store"
 )
 
 type ImportHandler struct {
-	store     store.Store
-	imagesDir string
+	store    store.Store
+	imgStore images.Store
 }
 
 func (h *ImportHandler) ImportCourse(w http.ResponseWriter, r *http.Request) {
@@ -220,14 +220,11 @@ func (h *ImportHandler) BulkImport(w http.ResponseWriter, r *http.Request) {
 		} else if strings.HasPrefix(header.Name, "images/") {
 			// Save image file
 			imgName := filepath.Base(header.Name)
-			if h.imagesDir != "" && imgName != "" {
-				os.MkdirAll(h.imagesDir, 0755)
-				imgPath := filepath.Join(h.imagesDir, imgName)
-				if _, err := os.Stat(imgPath); err != nil {
-					// Only write if doesn't exist
-					data, _ := io.ReadAll(io.LimitReader(tr, 50<<20))
-					os.WriteFile(imgPath, data, 0644)
-					imageCount++
+			if h.imgStore != nil && imgName != "" {
+				if !h.imgStore.Exists(imgName) {
+					if err := h.imgStore.Save(imgName, io.LimitReader(tr, 50<<20)); err == nil {
+						imageCount++
+					}
 				}
 			}
 		}

@@ -17,6 +17,7 @@ import (
 	godrawstore "github.com/anchoo2kewl/go-draw/store"
 	gowiki "github.com/anchoo2kewl/go-wiki"
 	"github.com/biswas-dev/learn/internal/api"
+	"github.com/biswas-dev/learn/internal/images"
 	"github.com/biswas-dev/learn/internal/auth"
 	"github.com/biswas-dev/learn/internal/config"
 	"github.com/biswas-dev/learn/internal/models"
@@ -53,6 +54,9 @@ func main() {
 			return
 		case "compress-images":
 			cliCompressImages()
+			return
+		case "migrate-to-s3":
+			cliMigrateToS3()
 			return
 		}
 	}
@@ -98,7 +102,23 @@ func main() {
 		}
 	}
 
-	router := api.NewRouter(db, cfg, wiki, drawHandler)
+	// Image store: S3 on prod, local on dev
+	var imgStore images.Store
+	if cfg.UseS3() {
+		imgStore, err = images.NewS3Store(cfg.S3Endpoint, cfg.S3KeyID, cfg.S3AppKey, cfg.S3Bucket)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to init S3 image store")
+		}
+		log.Info().Str("bucket", cfg.S3Bucket).Msg("using S3 image storage")
+	} else {
+		imgStore, err = images.NewLocalStore(cfg.ImagesDir)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to init local image store")
+		}
+		log.Info().Str("dir", cfg.ImagesDir).Msg("using local image storage")
+	}
+
+	router := api.NewRouter(db, cfg, wiki, drawHandler, imgStore)
 	addr := ":" + strconv.Itoa(cfg.Port)
 
 	srv := &http.Server{
@@ -313,6 +333,60 @@ func cliCompressContent() {
 		log.Warn().Err(err).Msg("vacuum failed")
 	}
 	log.Info().Msg("done")
+}
+
+func cliMigrateToS3() {
+	localDir := os.Getenv("LEARN_IMAGES_DIR")
+	if localDir == "" {
+		localDir = "data/images"
+	}
+	endpoint := os.Getenv("LEARN_S3_ENDPOINT")
+	keyID := os.Getenv("LEARN_S3_KEY_ID")
+	appKey := os.Getenv("LEARN_S3_APP_KEY")
+	bucket := os.Getenv("LEARN_S3_BUCKET")
+
+	if bucket == "" || keyID == "" || appKey == "" {
+		log.Fatal().Msg("LEARN_S3_ENDPOINT, LEARN_S3_KEY_ID, LEARN_S3_APP_KEY, LEARN_S3_BUCKET are required")
+	}
+
+	s3Store, err := images.NewS3Store(endpoint, keyID, appKey, bucket)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to init S3 store")
+	}
+
+	entries, err := os.ReadDir(localDir)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to read local images dir")
+	}
+
+	uploaded := 0
+	skipped := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if s3Store.Exists(name) {
+			skipped++
+			continue
+		}
+		f, err := os.Open(filepath.Join(localDir, name))
+		if err != nil {
+			log.Error().Err(err).Str("file", name).Msg("failed to open")
+			continue
+		}
+		if err := s3Store.Save(name, f); err != nil {
+			f.Close()
+			log.Error().Err(err).Str("file", name).Msg("failed to upload")
+			continue
+		}
+		f.Close()
+		uploaded++
+		if uploaded%50 == 0 {
+			log.Info().Int("uploaded", uploaded).Int("skipped", skipped).Msg("progress")
+		}
+	}
+	log.Info().Int("uploaded", uploaded).Int("skipped", skipped).Msg("migration complete")
 }
 
 func cliCompressImages() {
