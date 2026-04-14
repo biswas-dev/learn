@@ -157,12 +157,9 @@ func main() {
 				continue
 			}
 
-			// Check if content still has unresolved LazyLoadPlaceholder markers
-			// (fetchLesson tries HTML extraction, but if it fails, content has no images from those)
+			// Check if content has unresolved LazyLoadPlaceholder markers
 			needsBrowser := false
-			// We detect this by checking if the API had lazy loads that weren't resolved
-			// Simple heuristic: if fetchLesson's resolveLazyLoads found 0 XML and there were lazy placeholders
-			if strings.Contains(content, "<!-- lazy-unresolved -->") {
+			if strings.Contains(content, "<!-- lazy-unresolved-") {
 				needsBrowser = true
 				browserSlugs = append(browserSlugs, pgSlug)
 			}
@@ -196,14 +193,18 @@ func main() {
 			lessonIdx++
 			content := pg.content
 
-			// Inject Playwright-extracted images for pages that needed browser
+			// Inject Playwright-extracted images at exact placeholder positions
 			if pg.needsBrowser && playwrightResults != nil {
 				if imgs, ok := playwrightResults[pg.slug]; ok && len(imgs) > 0 {
-					// Append images at the positions where LazyLoadPlaceholders were
-					content = strings.ReplaceAll(content, "<!-- lazy-unresolved -->", "")
-					for _, imgPath := range imgs {
-						content += fmt.Sprintf("\n\n"+`<figure class="edu-image"><img src="%s" alt="diagram" /></figure>`, imgPath)
+					for i, imgPath := range imgs {
+						marker := fmt.Sprintf("<!-- lazy-unresolved-%d -->", i)
+						replacement := fmt.Sprintf(`<figure class="edu-image"><img src="%s" alt="diagram" /></figure>`, imgPath)
+						content = strings.Replace(content, marker, replacement, 1)
 					}
+				}
+				// Remove any remaining unresolved markers (more placeholders than images)
+				for i := 0; i < 50; i++ {
+					content = strings.Replace(content, fmt.Sprintf("<!-- lazy-unresolved-%d -->", i), "", 1)
 				}
 			}
 
@@ -686,10 +687,11 @@ func resolveLazyLoads(components []any, pageSlug string) []any {
 	}
 
 	if len(uniqueXMLs) == 0 {
-		// Mark unresolved — the batch Playwright pass will handle these later
+		// Mark EACH unresolved LazyLoadPlaceholder with a numbered marker
+		// so the batch Playwright pass can replace each one with the right image
 		result := make([]any, len(components))
 		copy(result, components)
-		// Insert a marker in the first LazyLoadPlaceholder so the caller knows
+		markerIdx := 0
 		for i, comp := range result {
 			cm, _ := comp.(map[string]any)
 			if cm["type"] == "LazyLoadPlaceholder" {
@@ -697,10 +699,9 @@ func resolveLazyLoads(components []any, pageSlug string) []any {
 				if at, _ := content["actualType"].(string); at == "MxGraphWidget" {
 					result[i] = map[string]any{
 						"type":    "unresolved_marker",
-						"content": "<!-- lazy-unresolved -->",
+						"content": fmt.Sprintf("<!-- lazy-unresolved-%d -->", markerIdx),
 					}
-					// Only mark once — the batch extractor will provide all images for the page
-					break
+					markerIdx++
 				}
 			}
 		}
