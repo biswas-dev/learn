@@ -1,6 +1,6 @@
 services:
   learn:
-    image: harbor.biswas.me/biswas/learn:latest
+    image: harbor.biswas.me/biswas/learn:x64-latest
     ports:
       - "13427:8080"
     volumes:
