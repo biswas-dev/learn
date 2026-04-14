@@ -18,9 +18,15 @@ type S3Store struct {
 }
 
 func NewS3Store(endpoint, keyID, appKey, bucket string) (*S3Store, error) {
+	// Extract region from B2 endpoint (e.g. "https://s3.ca-east-006.backblazeb2.com" → "ca-east-006")
+	region := "us-east-1"
+	if parts := strings.Split(endpoint, "."); len(parts) >= 3 {
+		region = parts[1] // e.g. "ca-east-006"
+	}
+
 	client := s3.New(s3.Options{
 		BaseEndpoint: aws.String(endpoint),
-		Region:       "auto",
+		Region:       region,
 		Credentials:  credentials.NewStaticCredentialsProvider(keyID, appKey, ""),
 		UsePathStyle: true,
 	})
