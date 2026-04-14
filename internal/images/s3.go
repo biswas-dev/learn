@@ -2,8 +2,10 @@ package images
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -117,6 +119,7 @@ func (s *S3Store) Handler(prefix string) http.Handler {
 
 		rc, err := s.Open(filename)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "s3: GET %s error: %v\n", filename, err)
 			http.NotFound(w, r)
 			return
 		}
