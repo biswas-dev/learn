@@ -1,10 +1,19 @@
 import { component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
-import { useLocation, Link } from "@builder.io/qwik-city";
+import { useLocation, Link, type StaticGenerateHandler } from "@builder.io/qwik-city";
+
+export const onStaticGenerate: StaticGenerateHandler = async () => {
+  return { params: [{ courseSlug: "_", sectionSlug: "_", pageSlug: "_" }] };
+};
 import { get, post as apiPost } from "~/lib/api";
 import type { Course, Page, Comment } from "~/lib/types";
 import { TableOfContents } from "~/components/courses/TableOfContents";
 import { PageNavigation } from "~/components/courses/PageNavigation";
 import { Lightbox, useImageLightbox } from "~/components/shared/Lightbox";
+import {
+  markPageRead,
+  saveBookmark,
+  getCompletedPages,
+} from "~/lib/progress";
 
 export default component$(() => {
   const loc = useLocation();
@@ -18,25 +27,48 @@ export default component$(() => {
   const showToc = useSignal(false);
   const lightboxSrc = useSignal("");
   const lightboxAlt = useSignal("");
-
-  const { courseSlug, sectionSlug, pageSlug } = loc.params;
+  const resolvedCourseSlug = useSignal(loc.params.courseSlug);
+  const resolvedSectionSlug = useSignal(loc.params.sectionSlug);
+  const resolvedPageSlug = useSignal(loc.params.pageSlug);
+  const completedIds = useSignal<number[]>([]);
 
   useImageLightbox(lightboxSrc, lightboxAlt);
 
   useVisibleTask$(({ track }) => {
-    track(() => loc.params.pageSlug);
+    track(() => loc.url.pathname);
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    const ci = parts.indexOf("courses");
+    const cs = ci >= 0 ? parts[ci + 1] : loc.params.courseSlug;
+    const ss = ci >= 0 ? parts[ci + 2] : loc.params.sectionSlug;
+    const ps = ci >= 0 ? parts[ci + 3] : loc.params.pageSlug;
+    if (!cs || cs === "_" || !ss || !ps) return;
+    resolvedCourseSlug.value = cs;
+    resolvedSectionSlug.value = ss;
+    resolvedPageSlug.value = ps;
     loading.value = true;
 
     Promise.all([
-      get<Course>(`/courses/${courseSlug}`),
-      get<Page>(`/courses/${courseSlug}/sections/${sectionSlug}/pages/${pageSlug}`),
+      get<Course>(`/courses/${cs}`),
+      get<Page>(`/courses/${cs}/sections/${ss}/pages/${ps}`),
     ])
       .then(([courseData, pageData]) => {
         course.value = courseData;
         page.value = pageData;
 
-        // Load comments if we have a page ID and a token
+        // Track reading progress
+        markPageRead(courseData.slug, pageData.id);
+        saveBookmark(
+          courseData.slug,
+          pageData.id,
+          `/courses/${cs}/${ss}/${ps}`,
+          pageData.title,
+        );
+        completedIds.value = [...getCompletedPages(courseData.slug)];
+
+        // Also mark via API if authenticated
         if (pageData.id && localStorage.getItem("learn_token")) {
+          apiPost(`/pages/${pageData.id}/complete`, {}).catch(() => {});
+
           get<Comment[]>(`/pages/${pageData.id}/comments`)
             .then((c) => {
               comments.value = c;
@@ -59,9 +91,9 @@ export default component$(() => {
     let currentIdx = -1;
     for (const section of course.value.sections) {
       for (const p of section.pages ?? []) {
-        const href = `/courses/${courseSlug}/${section.slug}/${p.slug}`;
+        const href = `/courses/${resolvedCourseSlug.value}/${section.slug}/${p.slug}`;
         allPages.push({ href, title: p.title });
-        if (p.slug === pageSlug && section.slug === sectionSlug) {
+        if (p.slug === resolvedPageSlug.value && section.slug === resolvedSectionSlug.value) {
           currentIdx = allPages.length - 1;
         }
       }
@@ -84,7 +116,7 @@ export default component$(() => {
     return (
       <main class="max-w-7xl mx-auto px-4 py-10">
         <p class="text-failure">{error.value || "Page not found"}</p>
-        <Link href={`/courses/${courseSlug}`} class="text-accent text-sm mt-2 inline-block">
+        <Link href={`/courses/${resolvedCourseSlug.value}`} class="text-accent text-sm mt-2 inline-block">
           Back to course
         </Link>
       </main>
@@ -116,9 +148,10 @@ export default component$(() => {
           >
             <div class="sticky top-20">
               <TableOfContents
-                courseSlug={courseSlug}
+                courseSlug={resolvedCourseSlug.value}
                 sections={course.value.sections}
-                currentPageSlug={pageSlug}
+                currentPageSlug={resolvedPageSlug.value}
+                completedPageIds={completedIds.value}
               />
             </div>
           </aside>

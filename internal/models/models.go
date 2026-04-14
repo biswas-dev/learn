@@ -52,8 +52,10 @@ type Course struct {
 	UpdatedAt     string `json:"updated_at"`
 
 	// Joined fields
-	AuthorName string    `json:"author_name,omitempty"`
-	Sections   []Section `json:"sections,omitempty"`
+	AuthorName   string    `json:"author_name,omitempty"`
+	SectionCount int       `json:"section_count"`
+	PageCount    int       `json:"page_count"`
+	Sections     []Section `json:"sections,omitempty"`
 }
 
 type Section struct {

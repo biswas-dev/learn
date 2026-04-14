@@ -1,4 +1,4 @@
-import { component$, useSignal, useVisibleTask$, type Signal } from "@builder.io/qwik";
+import { component$, useVisibleTask$, type Signal } from "@builder.io/qwik";
 
 interface Props {
   src: Signal<string>;
@@ -41,34 +41,34 @@ export const Lightbox = component$<Props>(({ src, alt }) => {
 });
 
 /**
- * Hook that attaches click handlers to all images inside a content container.
- * Call this in the page component and pass the lightbox signals.
+ * Hook that uses document-level event delegation to intercept clicks on
+ * images inside .ln-prose. Works regardless of when content is loaded.
  */
 export function useImageLightbox(
   lightboxSrc: Signal<string>,
   lightboxAlt: Signal<string>,
 ) {
-  useVisibleTask$(({ track, cleanup }) => {
-    track(() => lightboxSrc.value);
-
-    const handler = (e: Event) => {
+  useVisibleTask$(({ cleanup }) => {
+    const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
+      if (!target.closest(".ln-prose")) return;
+
+      let img: HTMLImageElement | null = null;
       if (target.tagName === "IMG") {
-        const img = target as HTMLImageElement;
-        lightboxSrc.value = img.src;
-        lightboxAlt.value = img.alt || "";
-        e.preventDefault();
+        img = target as HTMLImageElement;
+      } else if (target.tagName === "A") {
+        img = target.querySelector("img");
       }
+
+      if (!img) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      lightboxSrc.value = img.src;
+      lightboxAlt.value = img.alt || "";
     };
 
-    const container = document.querySelector(".ln-prose");
-    if (container) {
-      container.addEventListener("click", handler);
-      // Make images look clickable
-      container.querySelectorAll("img").forEach((img) => {
-        (img as HTMLElement).style.cursor = "zoom-in";
-      });
-      cleanup(() => container.removeEventListener("click", handler));
-    }
+    document.addEventListener("click", handler, true);
+    cleanup(() => document.removeEventListener("click", handler, true));
   });
 }

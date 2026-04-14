@@ -1,11 +1,15 @@
 import { component$, useSignal, useVisibleTask$, $ } from "@builder.io/qwik";
-import { useLocation, Link } from "@builder.io/qwik-city";
+import { useLocation, Link, type StaticGenerateHandler } from "@builder.io/qwik-city";
+
+export const onStaticGenerate: StaticGenerateHandler = async () => {
+  return { params: [{ courseId: "_" }] };
+};
 import { get, put, post, del } from "~/lib/api";
 import type { Course, Section, Page } from "~/lib/types";
 
 export default component$(() => {
   const loc = useLocation();
-  const courseId = loc.params.courseId;
+  const courseId = useSignal(loc.params.courseId);
 
   const course = useSignal<Course | null>(null);
   const loading = useSignal(true);
@@ -27,11 +31,14 @@ export default component$(() => {
 
   const loadCourse = $(async () => {
     try {
-      // Load by slug using list, or we can load by fetching all courses
-      // Actually, the API exposes GET /courses/:courseSlug by slug.
-      // For the edit page, we have the ID. Let's get all courses and filter.
+      // Resolve courseId from URL (SSG params may be "_")
+      const parts = window.location.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("courses");
+      if (idx >= 0 && parts[idx + 1] && parts[idx + 1] !== "_") {
+        courseId.value = parts[idx + 1];
+      }
       const courses = await get<Course[]>("/courses");
-      const c = courses.find((x) => String(x.id) === courseId);
+      const c = courses.find((x) => String(x.id) === courseId.value);
       if (!c) throw new Error("Course not found");
       // Fetch full course with sections by slug
       const full = await get<Course>(`/courses/${c.slug}`);
@@ -53,7 +60,7 @@ export default component$(() => {
   const saveCourse = $(async () => {
     saving.value = true;
     try {
-      await put<Course>(`/courses/${courseId}`, {
+      await put<Course>(`/courses/${courseId.value}`, {
         title: title.value,
         description: description.value,
         is_protected: isProtected.value,
@@ -238,7 +245,7 @@ export default component$(() => {
               {(section.pages ?? []).map((page) => (
                 <Link
                   key={page.id}
-                  href={`/dashboard/courses/${courseId}/sections/${section.id}/pages/${page.id}`}
+                  href={`/dashboard/courses/${courseId.value}/sections/${section.id}/pages/${page.id}`}
                   class="block text-sm text-muted hover:text-accent py-1 transition-colors"
                 >
                   {page.title}

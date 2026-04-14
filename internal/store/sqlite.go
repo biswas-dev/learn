@@ -142,7 +142,9 @@ func (s *SQLiteStore) DeleteCourse(ctx context.Context, id int64) error {
 }
 
 func (s *SQLiteStore) ListCourses(ctx context.Context, includeUnpublished, includeProtected bool) ([]models.Course, error) {
-	query := `SELECT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published, c.created_by, c.sort_order, c.created_at, c.updated_at, COALESCE(u.display_name, '')
+	query := `SELECT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published, c.created_by, c.sort_order, c.created_at, c.updated_at, COALESCE(u.display_name, ''),
+		 (SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id),
+		 (SELECT COUNT(*) FROM pages p JOIN sections s ON p.section_id = s.id WHERE s.course_id = c.id)
 		 FROM courses c LEFT JOIN users u ON c.created_by = u.id WHERE 1=1`
 	if !includeUnpublished {
 		query += ` AND c.is_published = 1`
@@ -160,7 +162,7 @@ func (s *SQLiteStore) ListCourses(ctx context.Context, includeUnpublished, inclu
 	var courses []models.Course
 	for rows.Next() {
 		c := models.Course{}
-		if err := rows.Scan(&c.ID, &c.Title, &c.Slug, &c.Description, &c.CoverImageURL, &c.IsProtected, &c.IsPublished, &c.CreatedBy, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt, &c.AuthorName); err != nil {
+		if err := rows.Scan(&c.ID, &c.Title, &c.Slug, &c.Description, &c.CoverImageURL, &c.IsProtected, &c.IsPublished, &c.CreatedBy, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt, &c.AuthorName, &c.SectionCount, &c.PageCount); err != nil {
 			return nil, err
 		}
 		courses = append(courses, c)

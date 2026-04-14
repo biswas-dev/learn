@@ -208,20 +208,83 @@ func serveSPA(r chi.Router, distPath string) {
 			return
 		}
 
-		// Fallback: serve root index.html with q:route cleared
-		// so Qwik performs client-side routing for dynamic paths
+		// Don't serve HTML fallback for data/asset requests
+		if strings.HasSuffix(r.URL.Path, ".json") || strings.HasSuffix(r.URL.Path, ".xml") {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Last resort fallback to root index.html
 		indexPath := filepath.Join(absPath, "index.html")
 		if _, err := os.Stat(indexPath); err == nil {
 			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			data, _ := os.ReadFile(indexPath)
-			html := strings.Replace(string(data), `q:route="/"`, `q:route=""`, 1)
-			w.Write([]byte(html))
+			http.ServeFile(w, r, indexPath)
 			return
 		}
 
 		http.NotFound(w, r)
 	})
+}
+
+// buildSPAShell extracts CSS/JS links from the SSG index.html and creates
+// a minimal HTML page that Qwik will fully render client-side.
+func buildSPAShell(ssgHTML string) string {
+	var links, scripts strings.Builder
+
+	// Extract <link rel="stylesheet" ...> and <link rel="modulepreload" ...>
+	for _, tag := range extractTags(ssgHTML, "<link ", ">") {
+		if strings.Contains(tag, "stylesheet") || strings.Contains(tag, "modulepreload") {
+			links.WriteString(tag)
+			links.WriteString("\n")
+		}
+	}
+
+	// Extract <script ...>...</script> tags
+	for _, tag := range extractTags(ssgHTML, "<script", "</script>") {
+		scripts.WriteString(tag)
+		scripts.WriteString("</script>\n")
+	}
+
+	// Extract <style> tags
+	for _, tag := range extractTags(ssgHTML, "<style", "</style>") {
+		links.WriteString(tag)
+		links.WriteString("</style>\n")
+	}
+
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn — Course Platform</title>
+` + links.String() + scripts.String() + `
+</head>
+<body class="bg-surface text-text min-h-screen antialiased">
+<div id="app"></div>
+<script type="module">
+import { render } from '/build/q-CprRSmAP.js';
+</script>
+</body>
+</html>`
+}
+
+func extractTags(html, startTag, endTag string) []string {
+	var tags []string
+	rest := html
+	for {
+		start := strings.Index(rest, startTag)
+		if start == -1 {
+			break
+		}
+		end := strings.Index(rest[start:], endTag)
+		if end == -1 {
+			break
+		}
+		end += start + len(endTag)
+		tags = append(tags, rest[start:end])
+		rest = rest[end:]
+	}
+	return tags
 }
 
 func resolveDynamicRoute(absPath, urlPath string) string {
@@ -247,13 +310,16 @@ func resolveDynamicRoute(absPath, urlPath string) string {
 		if _, err := os.Stat(literalDir); err == nil {
 			continue
 		}
-		original := parts[i]
+		// Segment doesn't exist literally — try wildcard placeholder
 		parts[i] = "_"
-		candidate := filepath.Join(absPath, filepath.Join(parts...), "index.html")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+		wildcardDir := filepath.Join(absPath, filepath.Join(parts[:i+1]...))
+		if _, err := os.Stat(wildcardDir); os.IsNotExist(err) {
+			return "" // no matching route structure
 		}
-		parts[i] = original
+	}
+	candidate := filepath.Join(absPath, filepath.Join(parts...), "index.html")
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
 	}
 	return ""
 }

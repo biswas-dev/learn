@@ -7,14 +7,14 @@ interface Props {
 }
 
 export const CourseCard = component$<Props>(({ course }) => {
-  const sectionCount = course.sections?.length ?? 0;
+  const sectionCount = course.section_count ?? course.sections?.length ?? 0;
   const pageCount =
-    course.sections?.reduce((acc, s) => acc + (s.pages?.length ?? 0), 0) ?? 0;
+    course.page_count ?? course.sections?.reduce((acc, s) => acc + (s.pages?.length ?? 0), 0) ?? 0;
 
   return (
     <Link
-      href={`/courses/${course.slug}`}
-      class="ln-card block rounded-lg border border-border bg-elevated p-5"
+      href={`/courses/${course.slug}/`}
+      class="ln-card block rounded-lg border border-border bg-elevated p-5 no-underline text-inherit cursor-pointer"
     >
       {course.cover_image_url && (
         <img

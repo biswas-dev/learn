@@ -31,7 +31,7 @@ export const Navbar = component$(() => {
             Learn
           </Link>
           <Link
-            href="/"
+            href="/courses"
             class="text-sm text-muted hover:text-text transition-colors"
           >
             Courses

@@ -33,6 +33,9 @@ Thumbs.db
 # Go
 vendor/
 
+# PID files (me.sh process tracking)
+.pids/
+
 # Debug artifacts
 *.png
 debug-*

@@ -22,6 +22,8 @@ export interface Course {
   created_at: string;
   updated_at: string;
   author_name?: string;
+  section_count?: number;
+  page_count?: number;
   sections?: Section[];
 }
 
