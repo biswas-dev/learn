@@ -35,6 +35,7 @@ COPY --from=frontend /app/frontend/dist/ /app/frontend/dist/
 VOLUME /data
 ENV LEARN_DB_PATH=/data/learn.db
 ENV LEARN_DRAW_DATA_DIR=/data/draw-data
+ENV LEARN_IMAGES_DIR=/data/images
 ENV LEARN_FRONTEND_DIST=/app/frontend/dist
 EXPOSE 8080
 ENTRYPOINT ["learn"]
