@@ -41,9 +41,11 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 	pageH := &PageHandler{store: s, wiki: wiki}
 	commentH := &CommentHandler{store: s}
 	importH := &ImportHandler{store: s, imgStore: imgStore}
-	adminH := &AdminHandler{store: s, port: cfg.Port}
+	adminH := &AdminHandler{store: s, port: cfg.Port, imageDir: cfg.ImagesDir}
 	progressH := &ProgressHandler{store: s}
 	apikeyH := &APIKeyHandler{store: s}
+	dashH := &DashboardHandler{store: s}
+	tagH := &TagHandler{store: s}
 
 	// Health + version
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -61,8 +63,10 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 	r.Group(func(r chi.Router) {
 		r.Use(OptionalAuth(cfg.JWTSecret, s))
 		r.Get("/api/courses", courseH.List)
+		r.Get("/api/courses/search", courseH.Search)
 		r.Get("/api/courses/{courseSlug}", courseH.GetBySlug)
 		r.Get("/api/courses/{courseSlug}/sections/{sectionSlug}/pages/{pageSlug}", pageH.GetPageContent)
+		r.Get("/api/tags", tagH.List)
 	})
 
 	// Authenticated routes
@@ -119,9 +123,13 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 			r.Delete("/api/comments/{commentId}", commentH.Delete)
 		})
 
+		// Dashboard
+		r.Get("/api/dashboard", dashH.GetDashboard)
+
 		// Progress (any authenticated)
 		r.Post("/api/pages/{pageId}/complete", progressH.MarkComplete)
 		r.Get("/api/courses/{courseId}/progress", progressH.GetCourseProgress)
+		r.Post("/api/courses/{courseId}/view", progressH.RecordView)
 
 		// Admin
 		r.Group(func(r chi.Router) {

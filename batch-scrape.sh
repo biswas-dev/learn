@@ -14,6 +14,10 @@ COOKIE_FILE="$HOME/.config/go-educative/cookie.txt"
 API_URL="http://localhost:8080"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Auto-refresh cookie from Chrome's cookie database
+echo "Refreshing cookie from Chrome..."
+python3 "$PROJECT_DIR/get-edu-cookie.py" --write
+
 # Get JWT for verification
 JWT=$(curl -s -X POST "$API_URL/api/auth/login" \
   -H 'Content-Type: application/json' \
@@ -26,11 +30,26 @@ echo "JWT: ${JWT:0:15}..."
 echo ""
 
 # Extract pending courses
+# SORT_BY: catalog (default), smallest, random
+# COURSE_IDS: comma-separated IDs to scrape specific courses
+SORT_BY="${SORT_BY:-catalog}"
+COURSE_IDS="${COURSE_IDS:-}"
 PENDING=$(python3 -c "
-import json
+import json, random
 with open('$CATALOG') as f:
     data = json.load(f)
-pending = [c for c in data['courses'] if c.get('status', 'pending') == 'pending']
+ids = '$COURSE_IDS'
+if ids:
+    id_list = [int(x) for x in ids.split(',')]
+    pending = [c for c in data['courses'] if c['id'] in id_list]
+else:
+    pending = [c for c in data['courses'] if c.get('status', 'pending') == 'pending']
+    if '$SORT_BY' == 'smallest':
+        pending = [c for c in pending if c.get('page_count', 0) > 0]
+        pending.sort(key=lambda c: c.get('page_count', 999))
+    elif '$SORT_BY' == 'random':
+        pending = [c for c in pending if c.get('page_count', 0) > 0]
+        random.shuffle(pending)
 for c in pending[:$COUNT]:
     print(f'{c[\"id\"]}|{c[\"author_id\"]}|{c[\"slug\"]}|{c[\"title\"]}')
 ")
@@ -43,6 +62,9 @@ SUCCESS=0
 FAILED=0
 
 while IFS='|' read -r COURSE_ID AUTHOR_ID SLUG TITLE; do
+  # Re-extract cookie from Chrome before each course (session may have refreshed)
+  python3 "$PROJECT_DIR/get-edu-cookie.py" --write 2>/dev/null || true
+
   SUCCESS=$((SUCCESS + 1))
   echo "===================================================================="
   echo "[$SUCCESS/$TOTAL] $TITLE"
@@ -147,34 +169,9 @@ PYEOF
 
   echo "  Pages scraped: $TOTAL_PAGES, Pages with images: $TOTAL_IMGS"
 
-  # ALWAYS stop if <10 images — user must verify before continuing
+  # Warn on low image count but continue (some courses are text/code-only)
   if [ "$IMG_COUNT" -lt 10 ] && [ "$TOTAL_IMGS" -lt 3 ]; then
-    echo ""
-    echo "!!! STOPPED: LOW IMAGE COUNT"
-    echo "!!! Course: $TITLE ($SLUG)"
-    echo "!!! Images found (sampled): $IMG_COUNT, Pages with images: $TOTAL_IMGS, Total pages: $TOTAL_PAGES"
-    echo "!!!"
-    echo "!!! Please verify on educative.io if this course is genuinely text-only."
-    echo "!!! If yes, restart the script to continue."
-    echo "!!! If no, investigate unhandled component types:"
-    echo "!!!   EDU_AUTHOR_ID=$AUTHOR_ID EDU_COLLECTION_ID=$COURSE_ID"
-    echo ""
-    # Still mark as downloaded since it was scraped successfully
-    python3 << PYEOF2
-import json
-with open("$CATALOG") as f:
-    data = json.load(f)
-for c in data["courses"]:
-    if c["id"] == $COURSE_ID:
-        c["status"] = "downloaded"
-        break
-data["downloaded"] = len([c for c in data["courses"] if c.get("status") == "downloaded"])
-data["pending"] = len([c for c in data["courses"] if c.get("status", "pending") == "pending"])
-with open("$CATALOG", "w") as f:
-    json.dump(data, f, indent=2)
-PYEOF2
-    echo "  ✓ Course marked as downloaded. Waiting for user input before next course."
-    exit 2
+    echo "  ⚠ LOW IMAGE COUNT (sampled: $IMG_COUNT, pages with images: $TOTAL_IMGS) — may be text-only course"
   fi
 
   # Update catalog.json

@@ -5,12 +5,13 @@ export const onStaticGenerate: StaticGenerateHandler = async () => {
   return { params: [{ courseSlug: "_" }] };
 };
 import { get } from "~/lib/api";
-import type { Course } from "~/lib/types";
+import type { Course, User } from "~/lib/types";
 import { TableOfContents } from "~/components/courses/TableOfContents";
 import {
   getCompletedPages,
   getBookmark,
   countPages,
+  markPageRead,
 } from "~/lib/progress";
 
 export default component$(() => {
@@ -21,6 +22,7 @@ export default component$(() => {
   const completedIds = useSignal<number[]>([]);
   const bookmark = useSignal<{ pageId: number; href: string; title: string } | null>(null);
   const totalPages = useSignal(0);
+  const user = useSignal<User | null>(null);
 
   useVisibleTask$(() => {
     const pathParts = window.location.pathname.split("/").filter(Boolean);
@@ -32,9 +34,26 @@ export default component$(() => {
         course.value = data;
         if (data.sections) {
           totalPages.value = countPages(data.sections);
-          const done = getCompletedPages(data.slug);
-          completedIds.value = [...done];
+          const localDone = getCompletedPages(data.slug);
+          completedIds.value = [...localDone];
           bookmark.value = getBookmark(data.slug);
+
+          // Load user + merge server-side progress if logged in
+          if (localStorage.getItem("learn_token")) {
+            get<User>("/me").then((u) => { user.value = u; }).catch(() => {});
+            get<{ page_id: number }[]>(`/courses/${data.id}/progress`)
+              .then((serverProgress) => {
+                if (serverProgress && serverProgress.length > 0) {
+                  const merged = new Set(localDone);
+                  for (const p of serverProgress) {
+                    merged.add(p.page_id);
+                    markPageRead(data.slug, p.page_id);
+                  }
+                  completedIds.value = [...merged];
+                }
+              })
+              .catch(() => {});
+          }
         }
       })
       .catch((err) => {
@@ -85,7 +104,18 @@ export default component$(() => {
             height={192}
           />
         )}
-        <h1 class="text-3xl font-bold text-text">{c.title}</h1>
+        <div class="flex items-start justify-between gap-4">
+          <h1 class="text-3xl font-bold text-text">{c.title}</h1>
+          {user.value && (user.value.role === "admin" || user.value.role === "editor") && (
+            <Link
+              href={`/dashboard/courses/${c.id}`}
+              class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted hover:text-accent bg-elevated border border-border rounded-lg hover:border-accent/30 transition-all"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit Course
+            </Link>
+          )}
+        </div>
         {c.description && (
           <p class="text-muted mt-2">{c.description}</p>
         )}

@@ -1,0 +1,45 @@
+import { component$, Slot } from "@builder.io/qwik";
+import { Link } from "@builder.io/qwik-city";
+import type { CourseSummary } from "~/lib/types";
+import { CourseCard } from "./CourseCard";
+
+interface Props {
+  title: string;
+  icon?: string;
+  courses: CourseSummary[];
+  viewAllHref?: string;
+  viewAllLabel?: string;
+  maxShow?: number;
+}
+
+export const CourseSection = component$<Props>(
+  ({ title, icon, courses, viewAllHref, viewAllLabel, maxShow = 6 }) => {
+    if (!courses || courses.length === 0) return null;
+
+    const visible = courses.slice(0, maxShow);
+
+    return (
+      <section class="mb-10">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-text flex items-center gap-2">
+            {icon && <span>{icon}</span>}
+            {title}
+          </h2>
+          {viewAllHref && (
+            <Link href={viewAllHref} class="text-sm text-accent hover:text-accent-hover transition-colors">
+              {viewAllLabel || `View All ${courses.length}`} →
+            </Link>
+          )}
+        </div>
+        <div class="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin">
+          {visible.map((course) => (
+            <div key={course.id} class="snap-start shrink-0 w-72">
+              <CourseCard course={course} />
+            </div>
+          ))}
+          <Slot />
+        </div>
+      </section>
+    );
+  }
+);

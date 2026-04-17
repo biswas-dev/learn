@@ -112,6 +112,57 @@ type Progress struct {
 	CompletedAt time.Time `json:"completed_at"`
 }
 
+type Tag struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Slug     string `json:"slug"`
+	Category string `json:"category"`
+	Count    int    `json:"count,omitempty"` // number of courses with this tag
+}
+
+type CourseSummary struct {
+	Course
+	Tags           []Tag   `json:"tags,omitempty"`
+	CompletedPages int     `json:"completed_pages"`
+	TotalPages     int     `json:"total_pages"`
+	ProgressPct    float64 `json:"progress_pct"`
+	LastViewedAt   string  `json:"last_viewed_at,omitempty"`
+}
+
+type DashboardResponse struct {
+	TotalCourses   int                        `json:"total_courses"`
+	InProgress     []CourseSummary            `json:"in_progress"`
+	RecentlyViewed []CourseSummary            `json:"recently_viewed"`
+	Categories     map[string][]CourseSummary `json:"categories"`
+}
+
+type PaginatedCourses struct {
+	Courses    []CourseSummary `json:"courses"`
+	TotalCount int             `json:"total_count"`
+	Page       int             `json:"page"`
+	PageSize   int             `json:"page_size"`
+}
+
+type StorageStats struct {
+	Courses      int    `json:"courses"`
+	Sections     int    `json:"sections"`
+	Pages        int    `json:"pages"`
+	Tags         int    `json:"tags"`
+	Users        int    `json:"users"`
+	Comments     int    `json:"comments"`
+	PageVersions int    `json:"page_versions"`
+	Progress     int    `json:"progress_entries"`
+	ContentSize  int64  `json:"content_size_bytes"`
+	ContentSizeH string `json:"content_size"`
+	DBSize       int64  `json:"db_size_bytes"`
+	DBSizeH      string `json:"db_size"`
+	ImageCount   int    `json:"image_count"`
+	ImageSize    int64  `json:"image_size_bytes"`
+	ImageSizeH   string `json:"image_size"`
+	TotalSize    int64  `json:"total_size_bytes"`
+	TotalSizeH   string `json:"total_size"`
+}
+
 type APIKey struct {
 	ID        int64  `json:"id"`
 	UserID    int64  `json:"user_id"`

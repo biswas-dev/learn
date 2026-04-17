@@ -93,4 +93,33 @@ var migrations = []string{
 	)`,
 	"CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash)",
 	"CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)",
+
+	// Tags and course categorization
+	`CREATE TABLE IF NOT EXISTS tags (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		slug TEXT NOT NULL UNIQUE,
+		category TEXT NOT NULL DEFAULT 'General'
+	)`,
+	`CREATE TABLE IF NOT EXISTS course_tags (
+		course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+		tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+		PRIMARY KEY (course_id, tag_id)
+	)`,
+	"CREATE INDEX IF NOT EXISTS idx_course_tags_tag ON course_tags(tag_id)",
+
+	// Recently-viewed tracking (server-side)
+	`CREATE TABLE IF NOT EXISTS course_views (
+		user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+		viewed_at DATETIME NOT NULL DEFAULT (datetime('now')),
+		PRIMARY KEY (user_id, course_id)
+	)`,
+	"CREATE INDEX IF NOT EXISTS idx_course_views_user ON course_views(user_id, viewed_at DESC)",
+
+	// FTS5 for course search
+	`CREATE VIRTUAL TABLE IF NOT EXISTS courses_fts USING fts5(
+		title, description, tags,
+		content='', tokenize='porter unicode61'
+	)`,
 }

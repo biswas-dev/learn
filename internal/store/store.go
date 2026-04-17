@@ -64,4 +64,28 @@ type Store interface {
 	GetUserByAPIKeyHash(ctx context.Context, keyHash string) (*models.User, error)
 	ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error)
 	DeleteAPIKey(ctx context.Context, id, userID int64) error
+
+	// Tags
+	GetOrCreateTag(ctx context.Context, name, slug, category string) (*models.Tag, error)
+	AddCourseTag(ctx context.Context, courseID, tagID int64) error
+	ListCourseTags(ctx context.Context, courseID int64) ([]models.Tag, error)
+	ListTagsWithCounts(ctx context.Context) ([]models.Tag, error)
+
+	// Search
+	SearchCourses(ctx context.Context, query string, limit int) ([]models.CourseSummary, error)
+	IndexCourseForSearch(ctx context.Context, courseID int64) error
+
+	// Dashboard
+	GetDashboard(ctx context.Context, userID int64) (*models.DashboardResponse, error)
+	ListCoursesPaginated(ctx context.Context, page, size int, category, tag string, includeProtected bool) (*models.PaginatedCourses, error)
+
+	// Course views
+	RecordCourseView(ctx context.Context, userID, courseID int64) error
+
+	// Enhanced progress
+	GetCoursesInProgress(ctx context.Context, userID int64, limit int) ([]models.CourseSummary, error)
+	GetAllCourseProgress(ctx context.Context, userID int64) (map[int64]int, error)
+
+	// Stats
+	GetStorageStats(ctx context.Context) (*models.StorageStats, error)
 }

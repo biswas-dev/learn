@@ -76,3 +76,33 @@ export interface Progress {
   page_id: number;
   completed_at: string;
 }
+
+export interface Tag {
+  id: number;
+  name: string;
+  slug: string;
+  category: string;
+  count?: number;
+}
+
+export interface CourseSummary extends Course {
+  tags?: Tag[];
+  completed_pages: number;
+  total_pages: number;
+  progress_pct: number;
+  last_viewed_at?: string;
+}
+
+export interface DashboardData {
+  total_courses: number;
+  in_progress: CourseSummary[];
+  recently_viewed: CourseSummary[];
+  categories: Record<string, CourseSummary[]>;
+}
+
+export interface PaginatedCourses {
+  courses: CourseSummary[];
+  total_count: number;
+  page: number;
+  page_size: number;
+}

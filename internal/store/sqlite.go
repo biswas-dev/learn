@@ -494,8 +494,456 @@ func (s *SQLiteStore) DeleteAPIKey(ctx context.Context, id, userID int64) error 
 	return err
 }
 
+// --- Stats ---
+
+func (s *SQLiteStore) GetStorageStats(ctx context.Context) (*models.StorageStats, error) {
+	st := &models.StorageStats{}
+
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM courses WHERE is_published = 1`).Scan(&st.Courses)
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sections`).Scan(&st.Sections)
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pages`).Scan(&st.Pages)
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tags`).Scan(&st.Tags)
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&st.Users)
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM comments`).Scan(&st.Comments)
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM page_versions`).Scan(&st.PageVersions)
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM progress`).Scan(&st.Progress)
+	s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(LENGTH(content)), 0) FROM pages`).Scan(&st.ContentSize)
+	st.ContentSizeH = humanSize(st.ContentSize)
+
+	// DB file size via page_count * page_size
+	var pageCount, pageSize int64
+	s.db.QueryRowContext(ctx, `PRAGMA page_count`).Scan(&pageCount)
+	s.db.QueryRowContext(ctx, `PRAGMA page_size`).Scan(&pageSize)
+	st.DBSize = pageCount * pageSize
+	st.DBSizeH = humanSize(st.DBSize)
+
+	return st, nil
+}
+
+func humanSize(b int64) string {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+	)
+	switch {
+	case b >= gb:
+		return fmt.Sprintf("%.1f GB", float64(b)/float64(gb))
+	case b >= mb:
+		return fmt.Sprintf("%.1f MB", float64(b)/float64(mb))
+	case b >= kb:
+		return fmt.Sprintf("%.1f KB", float64(b)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", b)
+	}
+}
+
 // contentHash returns a SHA-256 hash of the content for version deduplication.
 func contentHash(content string) string {
 	h := sha256.Sum256([]byte(content))
 	return fmt.Sprintf("%x", h[:8])
+}
+
+// --- Tags ---
+
+func (s *SQLiteStore) GetOrCreateTag(ctx context.Context, name, slug, category string) (*models.Tag, error) {
+	tag := &models.Tag{}
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, slug, category FROM tags WHERE slug = ?`, slug).
+		Scan(&tag.ID, &tag.Name, &tag.Slug, &tag.Category)
+	if err == sql.ErrNoRows {
+		res, err := s.db.ExecContext(ctx,
+			`INSERT INTO tags (name, slug, category) VALUES (?, ?, ?)`, name, slug, category)
+		if err != nil {
+			return nil, err
+		}
+		tag.ID, _ = res.LastInsertId()
+		tag.Name = name
+		tag.Slug = slug
+		tag.Category = category
+		return tag, nil
+	}
+	return tag, err
+}
+
+func (s *SQLiteStore) AddCourseTag(ctx context.Context, courseID, tagID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO course_tags (course_id, tag_id) VALUES (?, ?)`, courseID, tagID)
+	return err
+}
+
+func (s *SQLiteStore) ListCourseTags(ctx context.Context, courseID int64) ([]models.Tag, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.id, t.name, t.slug, t.category FROM tags t
+		 JOIN course_tags ct ON t.id = ct.tag_id WHERE ct.course_id = ? ORDER BY t.name`, courseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tags []models.Tag
+	for rows.Next() {
+		t := models.Tag{}
+		if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.Category); err != nil {
+			return nil, err
+		}
+		tags = append(tags, t)
+	}
+	return tags, nil
+}
+
+func (s *SQLiteStore) ListTagsWithCounts(ctx context.Context) ([]models.Tag, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.id, t.name, t.slug, t.category, COUNT(ct.course_id) as cnt
+		 FROM tags t JOIN course_tags ct ON t.id = ct.tag_id
+		 JOIN courses c ON ct.course_id = c.id AND c.is_published = 1
+		 GROUP BY t.id ORDER BY cnt DESC, t.name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tags []models.Tag
+	for rows.Next() {
+		t := models.Tag{}
+		if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.Category, &t.Count); err != nil {
+			return nil, err
+		}
+		tags = append(tags, t)
+	}
+	return tags, nil
+}
+
+// --- Search ---
+
+func (s *SQLiteStore) SearchCourses(ctx context.Context, query string, limit int) ([]models.CourseSummary, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published,
+			c.created_by, c.sort_order, c.created_at, c.updated_at, COALESCE(u.display_name, ''),
+			(SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id),
+			(SELECT COUNT(*) FROM pages p JOIN sections s ON p.section_id = s.id WHERE s.course_id = c.id)
+		 FROM courses_fts fts
+		 JOIN courses c ON fts.rowid = c.id
+		 LEFT JOIN users u ON c.created_by = u.id
+		 WHERE courses_fts MATCH ? AND c.is_published = 1
+		 ORDER BY rank
+		 LIMIT ?`, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanCourseSummaries(rows)
+}
+
+func (s *SQLiteStore) IndexCourseForSearch(ctx context.Context, courseID int64) error {
+	// Delete existing entry
+	s.db.ExecContext(ctx, `DELETE FROM courses_fts WHERE rowid = ?`, courseID)
+	// Re-insert with tags
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO courses_fts(rowid, title, description, tags)
+		 SELECT c.id, c.title, c.description,
+			COALESCE((SELECT GROUP_CONCAT(t.name, ' ') FROM course_tags ct JOIN tags t ON ct.tag_id = t.id WHERE ct.course_id = c.id), '')
+		 FROM courses c WHERE c.id = ? AND c.is_published = 1`, courseID)
+	return err
+}
+
+// IndexAllCoursesForSearch rebuilds the entire FTS index.
+func (s *SQLiteStore) IndexAllCoursesForSearch(ctx context.Context) error {
+	s.db.ExecContext(ctx, `DELETE FROM courses_fts`)
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO courses_fts(rowid, title, description, tags)
+		 SELECT c.id, c.title, c.description,
+			COALESCE((SELECT GROUP_CONCAT(t.name, ' ') FROM course_tags ct JOIN tags t ON ct.tag_id = t.id WHERE ct.course_id = c.id), '')
+		 FROM courses c WHERE c.is_published = 1`)
+	return err
+}
+
+// --- Course Views ---
+
+func (s *SQLiteStore) RecordCourseView(ctx context.Context, userID, courseID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO course_views (user_id, course_id, viewed_at) VALUES (?, ?, datetime('now'))
+		 ON CONFLICT(user_id, course_id) DO UPDATE SET viewed_at = datetime('now')`, userID, courseID)
+	return err
+}
+
+// --- Enhanced Progress ---
+
+func (s *SQLiteStore) GetAllCourseProgress(ctx context.Context, userID int64) (map[int64]int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT sec.course_id, COUNT(*)
+		 FROM progress pr
+		 JOIN pages p ON pr.page_id = p.id
+		 JOIN sections sec ON p.section_id = sec.id
+		 WHERE pr.user_id = ?
+		 GROUP BY sec.course_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[int64]int)
+	for rows.Next() {
+		var courseID int64
+		var count int
+		if err := rows.Scan(&courseID, &count); err != nil {
+			return nil, err
+		}
+		m[courseID] = count
+	}
+	return m, nil
+}
+
+func (s *SQLiteStore) GetCoursesInProgress(ctx context.Context, userID int64, limit int) ([]models.CourseSummary, error) {
+	if limit <= 0 {
+		limit = 6
+	}
+	// Use a wrapping query to filter by progress since HAVING without GROUP BY is non-standard
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT * FROM (
+			SELECT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published,
+				c.created_by, c.sort_order, c.created_at, c.updated_at, COALESCE(u.display_name, ''),
+				(SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id) as sec_cnt,
+				(SELECT COUNT(*) FROM pages p JOIN sections s ON p.section_id = s.id WHERE s.course_id = c.id) as total_pages,
+				(SELECT COUNT(*) FROM progress pr JOIN pages p ON pr.page_id = p.id JOIN sections s ON p.section_id = s.id WHERE s.course_id = c.id AND pr.user_id = ?) as completed_pages,
+				(SELECT MAX(pr2.completed_at) FROM progress pr2 JOIN pages p2 ON pr2.page_id = p2.id JOIN sections s2 ON p2.section_id = s2.id WHERE s2.course_id = c.id AND pr2.user_id = ?) as last_activity
+			 FROM courses c
+			 LEFT JOIN users u ON c.created_by = u.id
+			 WHERE c.is_published = 1
+			   AND c.id IN (SELECT DISTINCT sec.course_id FROM progress pr JOIN pages p ON pr.page_id = p.id JOIN sections sec ON p.section_id = sec.id WHERE pr.user_id = ?)
+		 ) WHERE completed_pages > 0 AND completed_pages < total_pages
+		 ORDER BY last_activity DESC
+		 LIMIT ?`, userID, userID, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var courses []models.CourseSummary
+	for rows.Next() {
+		cs := models.CourseSummary{}
+		var lastActivity sql.NullString
+		if err := rows.Scan(&cs.ID, &cs.Title, &cs.Slug, &cs.Description, &cs.CoverImageURL,
+			&cs.IsProtected, &cs.IsPublished, &cs.CreatedBy, &cs.SortOrder,
+			&cs.CreatedAt, &cs.UpdatedAt, &cs.AuthorName,
+			&cs.SectionCount, &cs.TotalPages, &cs.CompletedPages, &lastActivity); err != nil {
+			return nil, err
+		}
+		if cs.TotalPages > 0 {
+			cs.ProgressPct = float64(cs.CompletedPages) / float64(cs.TotalPages) * 100
+		}
+		cs.PageCount = cs.TotalPages
+		courses = append(courses, cs)
+	}
+	return courses, nil
+}
+
+// --- Dashboard ---
+
+func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64) (*models.DashboardResponse, error) {
+	resp := &models.DashboardResponse{
+		Categories: make(map[string][]models.CourseSummary),
+	}
+
+	// Total published courses
+	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM courses WHERE is_published = 1`).Scan(&resp.TotalCourses)
+
+	// Get progress map first (single query, fully consumed)
+	progressMap, _ := s.GetAllCourseProgress(ctx, userID)
+
+	// In-progress courses (fully consumed before next query)
+	inProgress, err := s.GetCoursesInProgress(ctx, userID, 6)
+	if err != nil {
+		return nil, fmt.Errorf("in-progress: %w", err)
+	}
+	resp.InProgress = inProgress
+	if resp.InProgress == nil {
+		resp.InProgress = []models.CourseSummary{}
+	}
+
+	// Enrich in-progress with tags (sequential — safe with single conn)
+	for i := range resp.InProgress {
+		tags, _ := s.ListCourseTags(ctx, resp.InProgress[i].ID)
+		resp.InProgress[i].Tags = tags
+	}
+
+	// Recently viewed (fully consumed into slice before next query)
+	recentRows, err := s.db.QueryContext(ctx,
+		`SELECT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published,
+			c.created_by, c.sort_order, c.created_at, c.updated_at, COALESCE(u.display_name, ''),
+			(SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id),
+			(SELECT COUNT(*) FROM pages p JOIN sections s ON p.section_id = s.id WHERE s.course_id = c.id),
+			cv.viewed_at
+		 FROM course_views cv
+		 JOIN courses c ON cv.course_id = c.id
+		 LEFT JOIN users u ON c.created_by = u.id
+		 WHERE cv.user_id = ? AND c.is_published = 1
+		 ORDER BY cv.viewed_at DESC
+		 LIMIT 6`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("recently viewed: %w", err)
+	}
+	for recentRows.Next() {
+		cs := models.CourseSummary{}
+		if err := recentRows.Scan(&cs.ID, &cs.Title, &cs.Slug, &cs.Description, &cs.CoverImageURL,
+			&cs.IsProtected, &cs.IsPublished, &cs.CreatedBy, &cs.SortOrder,
+			&cs.CreatedAt, &cs.UpdatedAt, &cs.AuthorName,
+			&cs.SectionCount, &cs.TotalPages, &cs.LastViewedAt); err != nil {
+			recentRows.Close()
+			return nil, err
+		}
+		cs.PageCount = cs.TotalPages
+		if completed, ok := progressMap[cs.ID]; ok {
+			cs.CompletedPages = completed
+			if cs.TotalPages > 0 {
+				cs.ProgressPct = float64(completed) / float64(cs.TotalPages) * 100
+			}
+		}
+		resp.RecentlyViewed = append(resp.RecentlyViewed, cs)
+	}
+	recentRows.Close() // Explicitly close before next query
+
+	if resp.RecentlyViewed == nil {
+		resp.RecentlyViewed = []models.CourseSummary{}
+	}
+
+	// Enrich recently viewed with tags
+	for i := range resp.RecentlyViewed {
+		tags, _ := s.ListCourseTags(ctx, resp.RecentlyViewed[i].ID)
+		resp.RecentlyViewed[i].Tags = tags
+	}
+
+	// Categories: get all published courses grouped by category (fully consumed into slice)
+	catRows, err := s.db.QueryContext(ctx,
+		`SELECT t.category, c.id, c.title, c.slug, c.description, c.cover_image_url,
+			c.is_protected, c.is_published, c.created_by, c.sort_order, c.created_at, c.updated_at,
+			COALESCE(u.display_name, ''),
+			(SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id),
+			(SELECT COUNT(*) FROM pages p JOIN sections s ON p.section_id = s.id WHERE s.course_id = c.id)
+		 FROM course_tags ct
+		 JOIN tags t ON ct.tag_id = t.id
+		 JOIN courses c ON ct.course_id = c.id
+		 LEFT JOIN users u ON c.created_by = u.id
+		 WHERE c.is_published = 1
+		 ORDER BY t.category, c.title`)
+	if err != nil {
+		return nil, fmt.Errorf("categories: %w", err)
+	}
+	seen := make(map[string]map[int64]bool) // deduplicate courses per category
+	for catRows.Next() {
+		var category string
+		cs := models.CourseSummary{}
+		if err := catRows.Scan(&category, &cs.ID, &cs.Title, &cs.Slug, &cs.Description, &cs.CoverImageURL,
+			&cs.IsProtected, &cs.IsPublished, &cs.CreatedBy, &cs.SortOrder,
+			&cs.CreatedAt, &cs.UpdatedAt, &cs.AuthorName,
+			&cs.SectionCount, &cs.TotalPages); err != nil {
+			catRows.Close()
+			return nil, err
+		}
+		cs.PageCount = cs.TotalPages
+		if completed, ok := progressMap[cs.ID]; ok {
+			cs.CompletedPages = completed
+			if cs.TotalPages > 0 {
+				cs.ProgressPct = float64(completed) / float64(cs.TotalPages) * 100
+			}
+		}
+		if seen[category] == nil {
+			seen[category] = make(map[int64]bool)
+		}
+		if seen[category][cs.ID] {
+			continue
+		}
+		seen[category][cs.ID] = true
+		// Limit to 4 courses per category in dashboard
+		if len(resp.Categories[category]) < 4 {
+			resp.Categories[category] = append(resp.Categories[category], cs)
+		}
+	}
+	catRows.Close()
+
+	return resp, nil
+}
+
+// --- Paginated Listing ---
+
+func (s *SQLiteStore) ListCoursesPaginated(ctx context.Context, page, size int, category, tag string, includeProtected bool) (*models.PaginatedCourses, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size <= 0 || size > 100 {
+		size = 24
+	}
+	offset := (page - 1) * size
+
+	baseWhere := `c.is_published = 1`
+	if !includeProtected {
+		baseWhere += ` AND c.is_protected = 0`
+	}
+	var args []any
+
+	joinClause := ""
+	if category != "" {
+		joinClause = ` JOIN course_tags ct ON ct.course_id = c.id JOIN tags t ON ct.tag_id = t.id`
+		baseWhere += ` AND t.category = ?`
+		args = append(args, category)
+	} else if tag != "" {
+		joinClause = ` JOIN course_tags ct ON ct.course_id = c.id JOIN tags t ON ct.tag_id = t.id`
+		baseWhere += ` AND t.slug = ?`
+		args = append(args, tag)
+	}
+
+	// Count total
+	var totalCount int
+	countQuery := `SELECT COUNT(DISTINCT c.id) FROM courses c` + joinClause + ` WHERE ` + baseWhere
+	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+		return nil, err
+	}
+
+	// Fetch page
+	dataQuery := `SELECT DISTINCT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published,
+		c.created_by, c.sort_order, c.created_at, c.updated_at, COALESCE(u.display_name, ''),
+		(SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id),
+		(SELECT COUNT(*) FROM pages p JOIN sections s ON p.section_id = s.id WHERE s.course_id = c.id)
+	 FROM courses c` + joinClause + ` LEFT JOIN users u ON c.created_by = u.id
+	 WHERE ` + baseWhere + `
+	 ORDER BY c.sort_order, c.title
+	 LIMIT ? OFFSET ?`
+
+	dataArgs := append(args, size, offset)
+	rows, err := s.db.QueryContext(ctx, dataQuery, dataArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	summaries, err := s.scanCourseSummaries(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.PaginatedCourses{
+		Courses:    summaries,
+		TotalCount: totalCount,
+		Page:       page,
+		PageSize:   size,
+	}, nil
+}
+
+// scanCourseSummaries scans course rows into CourseSummary slices (no progress info).
+func (s *SQLiteStore) scanCourseSummaries(rows *sql.Rows) ([]models.CourseSummary, error) {
+	var courses []models.CourseSummary
+	for rows.Next() {
+		cs := models.CourseSummary{}
+		if err := rows.Scan(&cs.ID, &cs.Title, &cs.Slug, &cs.Description, &cs.CoverImageURL,
+			&cs.IsProtected, &cs.IsPublished, &cs.CreatedBy, &cs.SortOrder,
+			&cs.CreatedAt, &cs.UpdatedAt, &cs.AuthorName,
+			&cs.SectionCount, &cs.TotalPages); err != nil {
+			return nil, err
+		}
+		cs.PageCount = cs.TotalPages
+		courses = append(courses, cs)
+	}
+	if courses == nil {
+		courses = []models.CourseSummary{}
+	}
+	return courses, nil
 }

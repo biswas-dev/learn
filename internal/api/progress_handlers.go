@@ -26,6 +26,20 @@ func (h *ProgressHandler) MarkComplete(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, http.StatusOK, map[string]string{"message": "marked complete"})
 }
 
+func (h *ProgressHandler) RecordView(w http.ResponseWriter, r *http.Request) {
+	courseID, err := strconv.ParseInt(chi.URLParam(r, "courseId"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid course id", http.StatusBadRequest)
+		return
+	}
+	userID := UserIDFromCtx(r.Context())
+	if err := h.store.RecordCourseView(r.Context(), userID, courseID); err != nil {
+		jsonError(w, "failed to record view", http.StatusInternalServerError)
+		return
+	}
+	jsonResp(w, http.StatusOK, map[string]string{"message": "recorded"})
+}
+
 func (h *ProgressHandler) GetCourseProgress(w http.ResponseWriter, r *http.Request) {
 	courseID, err := strconv.ParseInt(chi.URLParam(r, "courseId"), 10, 64)
 	if err != nil {

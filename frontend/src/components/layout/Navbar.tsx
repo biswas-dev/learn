@@ -2,6 +2,7 @@ import { component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import { Link, useNavigate } from "@builder.io/qwik-city";
 import { clearToken } from "~/lib/api";
 import type { User } from "~/lib/types";
+import { SearchBar } from "~/components/search/SearchBar";
 
 export const Navbar = component$(() => {
   const user = useSignal<User | null>(null);
@@ -31,23 +32,27 @@ export const Navbar = component$(() => {
             Learn
           </Link>
           <Link
-            href="/courses"
+            href="/dashboard"
             class="text-sm text-muted hover:text-text transition-colors"
           >
-            Courses
+            Library
           </Link>
         </div>
 
         <div class="flex items-center gap-4">
+          <SearchBar />
+
           {user.value ? (
             <>
-              <Link
-                href="/dashboard"
-                class="text-sm text-muted hover:text-text transition-colors"
-              >
-                Dashboard
-              </Link>
-              <span class="text-sm text-muted">
+              {(user.value.role === "admin" || user.value.role === "editor") && (
+                <Link
+                  href="/dashboard/courses/new"
+                  class="text-sm text-muted hover:text-text transition-colors"
+                >
+                  Admin
+                </Link>
+              )}
+              <span class="text-sm text-muted hidden sm:inline">
                 {user.value.display_name}
               </span>
               <button

@@ -14,8 +14,37 @@ export const TableOfContents = component$<Props>(
     let globalPageIdx = 0;
     const completed = new Set(completedPageIds ?? []);
 
+    // Calculate overall progress
+    const totalPages = sections.reduce((sum, s) => sum + (s.pages?.length ?? 0), 0);
+    const completedCount = sections.reduce(
+      (sum, s) => sum + (s.pages ?? []).filter((p) => completed.has(p.id)).length, 0,
+    );
+    const progressPct = totalPages > 0 ? (completedCount / totalPages) * 100 : 0;
+
+    // SVG progress ring
+    const ringSize = 28;
+    const ringStroke = 2.5;
+    const ringRadius = (ringSize - ringStroke) / 2;
+    const ringCircumference = 2 * Math.PI * ringRadius;
+    const ringOffset = ringCircumference - (progressPct / 100) * ringCircumference;
+    const ringColor = progressPct >= 100 ? "#34d399" : "#818cf8";
+
     return (
       <nav class="space-y-5">
+        {/* Progress summary */}
+        {totalPages > 0 && (
+          <div class="flex items-center gap-3 pb-3 border-b border-border">
+            <svg width={ringSize} height={ringSize} class="transform -rotate-90 shrink-0">
+              <circle cx={ringSize / 2} cy={ringSize / 2} r={ringRadius} fill="none" stroke="#1e2235" stroke-width={ringStroke} />
+              <circle cx={ringSize / 2} cy={ringSize / 2} r={ringRadius} fill="none" stroke={ringColor} stroke-width={ringStroke} stroke-linecap="round" stroke-dasharray={ringCircumference} stroke-dashoffset={ringOffset} class="transition-all duration-500" />
+            </svg>
+            <div>
+              <span class="text-xs font-medium text-text">{completedCount} of {totalPages} pages</span>
+              <span class="text-xs text-muted ml-1">({Math.round(progressPct)}%)</span>
+            </div>
+          </div>
+        )}
+
         {sections.map((section, secIdx) => (
           <div key={section.id}>
             <h4 class="text-xs font-bold text-muted uppercase tracking-wider mb-2">

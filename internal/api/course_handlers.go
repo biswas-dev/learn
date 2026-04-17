@@ -32,6 +32,32 @@ func (h *CourseHandler) List(w http.ResponseWriter, r *http.Request) {
 		includeProtected = true
 	}
 
+	// If pagination params present, use paginated listing
+	pageStr := r.URL.Query().Get("page")
+	sizeStr := r.URL.Query().Get("size")
+	category := r.URL.Query().Get("category")
+	tag := r.URL.Query().Get("tag")
+
+	if pageStr != "" || category != "" || tag != "" {
+		page, _ := strconv.Atoi(pageStr)
+		size, _ := strconv.Atoi(sizeStr)
+		if page < 1 {
+			page = 1
+		}
+		if size <= 0 {
+			size = 24
+		}
+		result, err := h.store.ListCoursesPaginated(r.Context(), page, size, category, tag, includeProtected)
+		if err != nil {
+			jsonError(w, "failed to list courses", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Cache-Control", "public, max-age=60, stale-while-revalidate=300")
+		jsonResp(w, http.StatusOK, result)
+		return
+	}
+
+	// Default: return all courses (backward compatible)
 	courses, err := h.store.ListCourses(r.Context(), includeUnpublished, includeProtected)
 	if err != nil {
 		jsonError(w, "failed to list courses", http.StatusInternalServerError)
@@ -41,6 +67,27 @@ func (h *CourseHandler) List(w http.ResponseWriter, r *http.Request) {
 		courses = []models.Course{}
 	}
 	jsonResp(w, http.StatusOK, courses)
+}
+
+func (h *CourseHandler) Search(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		jsonResp(w, http.StatusOK, []models.CourseSummary{})
+		return
+	}
+	limitStr := r.URL.Query().Get("limit")
+	limit, _ := strconv.Atoi(limitStr)
+	if limit <= 0 {
+		limit = 20
+	}
+
+	results, err := h.store.SearchCourses(r.Context(), query, limit)
+	if err != nil {
+		jsonError(w, "search failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	jsonResp(w, http.StatusOK, results)
 }
 
 func (h *CourseHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {

@@ -5,7 +5,7 @@ export const onStaticGenerate: StaticGenerateHandler = async () => {
   return { params: [{ courseSlug: "_", sectionSlug: "_", pageSlug: "_" }] };
 };
 import { get, post as apiPost } from "~/lib/api";
-import type { Course, Page, Comment } from "~/lib/types";
+import type { Course, Page, Comment, User } from "~/lib/types";
 import { TableOfContents } from "~/components/courses/TableOfContents";
 import { PageNavigation } from "~/components/courses/PageNavigation";
 import { Lightbox, useImageLightbox } from "~/components/shared/Lightbox";
@@ -14,6 +14,7 @@ import {
   saveBookmark,
   getCompletedPages,
 } from "~/lib/progress";
+import { ReadingProgress } from "~/components/shared/ReadingProgress";
 
 export default component$(() => {
   const loc = useLocation();
@@ -31,6 +32,8 @@ export default component$(() => {
   const resolvedSectionSlug = useSignal(loc.params.sectionSlug);
   const resolvedPageSlug = useSignal(loc.params.pageSlug);
   const completedIds = useSignal<number[]>([]);
+  const pageMarkedComplete = useSignal(false);
+  const user = useSignal<User | null>(null);
 
   useImageLightbox(lightboxSrc, lightboxAlt);
 
@@ -55,25 +58,45 @@ export default component$(() => {
         course.value = courseData;
         page.value = pageData;
 
-        // Track reading progress
-        markPageRead(courseData.slug, pageData.id);
+        // Save bookmark but DON'T mark as read yet — wait for 60% scroll
         saveBookmark(
           courseData.slug,
           pageData.id,
           `/courses/${cs}/${ss}/${ps}`,
           pageData.title,
         );
-        completedIds.value = [...getCompletedPages(courseData.slug)];
+        // Load completed pages from localStorage
+        const localCompleted = getCompletedPages(courseData.slug);
+        completedIds.value = [...localCompleted];
+        pageMarkedComplete.value = localCompleted.has(pageData.id);
 
-        // Also mark via API if authenticated
-        if (pageData.id && localStorage.getItem("learn_token")) {
-          apiPost(`/pages/${pageData.id}/complete`, {}).catch(() => {});
+        // Load user info + record course view + load server progress + comments
+        if (localStorage.getItem("learn_token")) {
+          get<User>("/me").then((u) => { user.value = u; }).catch(() => {});
+          apiPost(`/courses/${courseData.id}/view`, {}).catch(() => {});
 
-          get<Comment[]>(`/pages/${pageData.id}/comments`)
-            .then((c) => {
-              comments.value = c;
-            })
-            .catch(() => {});
+          // Merge server-side progress with localStorage
+          get<{ user_id: number; page_id: number; completed_at: string }[]>(
+            `/courses/${courseData.id}/progress`
+          ).then((serverProgress) => {
+            if (serverProgress && serverProgress.length > 0) {
+              const merged = new Set(localCompleted);
+              for (const p of serverProgress) {
+                merged.add(p.page_id);
+                // Sync to localStorage
+                markPageRead(courseData.slug, p.page_id);
+              }
+              completedIds.value = [...merged];
+            }
+          }).catch(() => {});
+
+          if (pageData.id) {
+            get<Comment[]>(`/pages/${pageData.id}/comments`)
+              .then((c) => {
+                comments.value = c;
+              })
+              .catch(() => {});
+          }
         }
       })
       .catch((err) => {
@@ -159,7 +182,18 @@ export default component$(() => {
 
         {/* Page content */}
         <article class="flex-1 min-w-0">
-          <h1 class="text-2xl font-bold text-text mb-6">{page.value.title}</h1>
+          <div class="flex items-start justify-between gap-4 mb-6">
+            <h1 class="text-2xl font-bold text-text">{page.value.title}</h1>
+            {user.value && (user.value.role === "admin" || user.value.role === "editor") && course.value && page.value && (
+              <Link
+                href={`/dashboard/courses/${course.value.id}/sections/${page.value.section_id}/pages/${page.value.id}`}
+                class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted hover:text-accent bg-elevated border border-border rounded-lg hover:border-accent/30 transition-all"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit
+              </Link>
+            )}
+          </div>
           <div
             class="ln-prose"
             dangerouslySetInnerHTML={page.value.content_html || ""}
@@ -225,6 +259,20 @@ export default component$(() => {
           )}
         </article>
       </div>
+      <ReadingProgress
+        threshold={60}
+        isComplete={pageMarkedComplete.value || (page.value ? completedIds.value.includes(page.value.id) : false)}
+        onComplete$={() => {
+          if (page.value && course.value && !pageMarkedComplete.value) {
+            pageMarkedComplete.value = true;
+            markPageRead(course.value.slug, page.value.id);
+            completedIds.value = [...getCompletedPages(course.value.slug)];
+            if (localStorage.getItem("learn_token")) {
+              apiPost(`/pages/${page.value.id}/complete`, {}).catch(() => {});
+            }
+          }
+        }}
+      />
       <Lightbox src={lightboxSrc} alt={lightboxAlt} />
     </main>
   );
