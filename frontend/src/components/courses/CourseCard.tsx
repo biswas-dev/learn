@@ -73,6 +73,9 @@ export const CourseCard = component$<Props>(({ course }) => {
           {readingMins < 60 ? `${readingMins}m` : `${Math.round(readingMins / 60)}h ${readingMins % 60}m`}
         </span>
         <span>{pageCount} pages</span>
+        {course.created_at && (
+          <span>{new Date(course.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+        )}
       </div>
 
       {/* Progress bar at bottom */}

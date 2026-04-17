@@ -119,9 +119,12 @@ export default component$(() => {
         {c.description && (
           <p class="text-muted mt-2">{c.description}</p>
         )}
-        {c.author_name && (
-          <p class="text-sm text-muted mt-1">by {c.author_name}</p>
-        )}
+        <div class="flex items-center gap-3 text-sm text-muted mt-2">
+          {c.author_name && <span>by {c.author_name}</span>}
+          {c.created_at && (
+            <span>Published {new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+          )}
+        </div>
       </div>
 
       {/* Progress bar */}
