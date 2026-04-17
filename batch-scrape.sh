@@ -21,7 +21,7 @@ python3 "$PROJECT_DIR/get-edu-cookie.py" --write
 # Get JWT for verification
 JWT=$(curl -s -X POST "$API_URL/api/auth/login" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"anshuman@biswas.me","password":"md27rV9oVfqOUnM7B4aT"}' \
+  -d '{"email":"anshuman@biswas.me","password":"Learn2026!"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 
 echo "=== Batch scrape: $COUNT courses ==="

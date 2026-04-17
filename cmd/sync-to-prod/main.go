@@ -318,7 +318,7 @@ func uploadArchive(prodURL, token string, archive *bytes.Buffer, slug string) er
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("upload returned %d: %s", resp.StatusCode, string(respBody))
 	}
