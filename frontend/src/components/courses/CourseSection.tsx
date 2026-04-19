@@ -21,17 +21,18 @@ export const CourseSection = component$<Props>(
     return (
       <section class="mb-10">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold text-text flex items-center gap-2">
+          <h2 class="text-[14px] font-medium flex items-center gap-2">
             {icon && <span>{icon}</span>}
             {title}
           </h2>
           {viewAllHref && (
-            <Link href={viewAllHref} class="text-sm text-accent hover:text-accent-hover transition-colors">
-              {viewAllLabel || `View All ${courses.length}`} →
+            <Link href={viewAllHref} class="ln-btn ln-btn-ghost text-[12px] text-accent">
+              {viewAllLabel || `View All ${courses.length}`}
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6h8m0 0L6 2m4 4L6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </Link>
           )}
         </div>
-        <div class="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin">
+        <div class="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
           {visible.map((course) => (
             <div key={course.id} class="snap-start shrink-0 w-72">
               <CourseCard course={course} />

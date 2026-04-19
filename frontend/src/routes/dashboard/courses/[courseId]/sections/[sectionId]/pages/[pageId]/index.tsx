@@ -21,7 +21,6 @@ export default component$(() => {
   const showVersions = useSignal(false);
 
   useVisibleTask$(() => {
-    // Resolve real IDs from URL (SSG params are "_")
     const parts = window.location.pathname.split("/").filter(Boolean);
     const ci = parts.indexOf("courses");
     const si = parts.indexOf("sections");
@@ -44,7 +43,6 @@ export default component$(() => {
       .then(async ([vers, course]) => {
         versions.value = vers;
 
-        // Find page title and slugs from course data
         let pageTitle = "";
         let sectionSlug = "";
         let pageSlug = "";
@@ -60,7 +58,6 @@ export default component$(() => {
           }
         }
 
-        // Get content: prefer versions, fall back to fetching page directly
         let content = vers.length > 0 ? vers[vers.length - 1].content : "";
         if (!content && course && sectionSlug && pageSlug) {
           try {
@@ -83,18 +80,13 @@ export default component$(() => {
           updated_at: "",
         };
       })
-      .catch((err) => {
-        error.value = err.message;
-      })
-      .finally(() => {
-        loading.value = false;
-      });
+      .catch((err) => { error.value = err.message; })
+      .finally(() => { loading.value = false; });
   });
 
   const handleSave = $(async (content: string) => {
     try {
       await put(`/pages/${pageId.value}/content`, { content });
-      // Refresh versions
       const vers = await get<PageVersion[]>(`/pages/${pageId.value}/versions`);
       versions.value = vers;
     } catch (err: any) {
@@ -106,19 +98,13 @@ export default component$(() => {
     try {
       await fetch(`/api/pages/${pageId.value}/versions/${versionNum}/restore`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("learn_token")}`,
-        },
+        headers: { Authorization: `Bearer ${localStorage.getItem("learn_token")}` },
       });
-      // Reload
       const vers = await get<PageVersion[]>(`/pages/${pageId.value}/versions`);
       versions.value = vers;
       if (vers.length > 0) {
         const latest = vers[vers.length - 1];
-        page.value = {
-          ...page.value!,
-          content: latest.content,
-        };
+        page.value = { ...page.value!, content: latest.content };
       }
     } catch (err: any) {
       error.value = err.message;
@@ -126,38 +112,50 @@ export default component$(() => {
   });
 
   if (loading.value) {
-    return <div class="p-8"><p class="text-muted">Loading editor...</p></div>;
+    return (
+      <div class="p-6 lg:px-8">
+        <div class="animate-pulse">
+          <div class="h-5 bg-border-soft rounded w-32 mb-4" />
+          <div class="h-[400px] bg-border-soft rounded-xl" />
+        </div>
+      </div>
+    );
   }
 
   if (error.value && !page.value) {
-    return <div class="p-8"><p class="text-failure">{error.value}</p></div>;
+    return (
+      <div class="p-6 lg:px-8">
+        <div class="ln-panel"><div class="ln-panel-body text-failure text-[13px]">{error.value}</div></div>
+      </div>
+    );
   }
 
   return (
-    <div class="flex flex-col h-[calc(100vh-3.5rem)]">
+    <div class="flex flex-col h-[calc(100vh-57px)]">
       {/* Header bar */}
-      <div class="flex items-center justify-between px-4 py-2 border-b border-border bg-elevated/50 shrink-0">
+      <div class="flex items-center justify-between px-4 py-2.5 border-b border-border-soft bg-bg-2 shrink-0">
         <div class="flex items-center gap-3">
           <Link
             href={`/dashboard/courses/${courseId.value}`}
-            class="text-sm text-muted hover:text-accent transition-colors"
+            class="ln-btn ln-btn-ghost text-[12px]"
           >
-            &larr; Back
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+            Back
           </Link>
-          <h1 class="text-sm font-bold text-text">{page.value?.title || "Edit Page"}</h1>
+          <span class="text-border-soft">|</span>
+          <h1 class="text-[13px] font-medium">{page.value?.title || "Edit Page"}</h1>
         </div>
         <button
-          class="text-xs text-muted hover:text-text transition-colors"
-          onClick$={() => {
-            showVersions.value = !showVersions.value;
-          }}
+          class="ln-btn ln-btn-ghost text-[12px]"
+          onClick$={() => { showVersions.value = !showVersions.value; }}
         >
-          {showVersions.value ? "Hide" : "Show"} Versions ({versions.value.length})
+          {showVersions.value ? "Hide" : "Show"} Versions
+          <span class="ln-pill plain ml-1">{versions.value.length}</span>
         </button>
       </div>
 
       {error.value && (
-        <div class="px-4 py-2 bg-failure/10 border-b border-failure/20 text-sm text-failure shrink-0">
+        <div class="px-4 py-2 text-[13px] text-failure bg-[color-mix(in_oklch,var(--color-failure)_10%,transparent)] border-b border-[color-mix(in_oklch,var(--color-failure)_25%,transparent)] shrink-0">
           {error.value}
         </div>
       )}
@@ -172,29 +170,24 @@ export default component$(() => {
         </div>
 
         {showVersions.value && (
-          <aside class="w-56 shrink-0 border-l border-border p-3 overflow-y-auto bg-elevated/30">
-            <h3 class="text-xs font-semibold text-text mb-3">Versions</h3>
+          <aside class="w-56 shrink-0 border-l border-border-soft p-3 overflow-y-auto bg-bg-2">
+            <h3 class="font-mono text-[10.5px] text-subtle tracking-[0.1em] uppercase mb-3">Versions</h3>
             <div class="space-y-2">
               {versions.value
                 .slice()
                 .reverse()
                 .map((v) => (
-                  <div
-                    key={v.id}
-                    class="p-2 border border-border rounded-md bg-elevated"
-                  >
+                  <div key={v.id} class="p-2.5 border border-border-soft rounded-lg bg-surface">
                     <div class="flex items-center justify-between">
-                      <span class="text-xs text-text font-medium">
-                        v{v.version_number}
-                      </span>
+                      <span class="text-[12px] font-medium font-mono">v{v.version_number}</span>
                       <button
-                        class="text-[10px] text-accent hover:text-accent-hover"
+                        class="text-[10.5px] text-accent hover:text-accent-hover font-mono"
                         onClick$={() => restoreVersion(v.version_number)}
                       >
                         Restore
                       </button>
                     </div>
-                    <p class="text-[10px] text-muted mt-1">
+                    <p class="text-[10.5px] text-subtle font-mono mt-1">
                       {new Date(v.created_at).toLocaleString()}
                     </p>
                   </div>

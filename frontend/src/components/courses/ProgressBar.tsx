@@ -6,20 +6,18 @@ interface Props {
   showLabel?: boolean;
 }
 
-export const ProgressBar = component$<Props>(({ percent, height = "h-1.5", showLabel = false }) => {
+export const ProgressBar = component$<Props>(({ percent, height = "h-1", showLabel = false }) => {
   const clamped = Math.min(100, Math.max(0, percent));
-  const color = clamped >= 100 ? "bg-success" : "bg-accent";
 
   return (
     <div class="flex items-center gap-2">
-      <div class={`flex-1 rounded-full bg-border overflow-hidden ${height}`}>
+      <div class={`flex-1 ln-track ${height}`}>
         <div
-          class={`${color} ${height} rounded-full transition-all duration-500`}
           style={{ width: `${clamped}%` }}
         />
       </div>
       {showLabel && (
-        <span class="text-xs text-muted whitespace-nowrap">{Math.round(clamped)}%</span>
+        <span class="font-mono text-[10.5px] text-subtle whitespace-nowrap">{Math.round(clamped)}%</span>
       )}
     </div>
   );

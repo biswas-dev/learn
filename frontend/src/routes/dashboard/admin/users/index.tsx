@@ -53,8 +53,6 @@ export default component$(() => {
 
   const roles: UserRole[] = ["admin", "editor", "commenter", "viewer"];
 
-  // Get unique tag categories that have protected course content (for access grants)
-  // Show all tags grouped by category for the access control
   const tagsByCategory = allTags.value.reduce<Record<string, Tag[]>>((acc, tag) => {
     if (!acc[tag.category]) acc[tag.category] = [];
     acc[tag.category].push(tag);
@@ -62,90 +60,108 @@ export default component$(() => {
   }, {});
 
   return (
-    <div class="p-8">
-      <h1 class="text-2xl font-bold text-text mb-2">Manage Users</h1>
-      <p class="text-sm text-muted mb-6">
-        Set roles and grant access to protected course collections.
-      </p>
+    <div class="p-6 lg:px-8 lg:pb-16 max-w-[1100px]">
+      {/* Page top */}
+      <div class="flex items-center justify-between mb-[18px]">
+        <div class="ln-breadcrumb">
+          learn <span class="text-border-soft">/</span> admin <span class="text-border-soft">/</span> <b>users</b>
+        </div>
+      </div>
+
+      <div class="ln-greet">
+        <h1>Manage Users <em>{users.value.length}</em></h1>
+        <p class="text-muted text-[13.5px] mt-1">Set roles and grant access to protected course collections.</p>
+      </div>
 
       {error.value && (
-        <div class="mb-4 p-3 bg-failure/10 border border-failure/20 rounded-md text-sm text-failure">
+        <div class="mb-4 p-3 rounded-lg text-[13px] text-failure bg-[color-mix(in_oklch,var(--color-failure)_10%,transparent)] border border-[color-mix(in_oklch,var(--color-failure)_25%,transparent)]">
           {error.value}
         </div>
       )}
 
-      {loading.value && <p class="text-muted">Loading users...</p>}
+      {loading.value && (
+        <div class="animate-pulse space-y-2">
+          {[1,2,3].map((i) => <div key={i} class="h-16 bg-border-soft rounded-xl" />)}
+        </div>
+      )}
 
       {!loading.value && (
-        <div class="space-y-3">
-          {users.value.map((user) => {
-            const userTags = user.access_tags || [];
-            return (
-              <div
-                key={user.id}
-                class="border border-border rounded-lg p-4 hover:bg-surface-hover transition-colors"
-              >
-                <div class="flex items-center justify-between mb-3">
-                  <div>
-                    <span class="font-medium text-text">{user.display_name}</span>
-                    <span class="text-muted text-sm ml-2">{user.email}</span>
-                    <span class="text-muted text-xs ml-2">
-                      joined {new Date(user.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <select
-                    class="bg-surface border border-border rounded-md px-2 py-1 text-sm text-text focus:outline-none focus:border-accent"
-                    value={user.role}
-                    onChange$={(_, el) => {
-                      updateRole(user.id, el.value as UserRole);
-                    }}
-                  >
-                    {roles.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Tag access grants */}
-                <div class="flex flex-wrap gap-1.5">
-                  <span class="text-xs text-muted mr-1 self-center">Access:</span>
-                  {user.role === "admin" ? (
-                    <span class="text-xs text-muted italic">admin — full access</span>
-                  ) : (
-                    <>
-                      {Object.entries(tagsByCategory).map(([category, tags]) =>
-                        tags.map((tag) => {
-                          const hasAccess = userTags.some((ut) => ut.id === tag.id);
-                          return (
-                            <button
-                              key={tag.id}
-                              class={[
-                                "text-xs px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
-                                hasAccess
-                                  ? "bg-accent/20 border-accent text-accent"
-                                  : "bg-surface border-border text-muted hover:border-accent/50",
-                              ].join(" ")}
-                              title={`${category}: ${tag.name}`}
-                              onClick$={() =>
-                                toggleTagAccess(user.id, tag.id, userTags)
-                              }
-                            >
-                              {tag.name}
-                            </button>
-                          );
-                        }),
-                      )}
-                      {allTags.value.length === 0 && (
-                        <span class="text-xs text-muted italic">no tags available</span>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        <div class="ln-panel">
+          <div class="ln-panel-body p0">
+            <table class="ln-tbl">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Joined</th>
+                  <th>Access</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.value.map((user) => {
+                  const userTags = user.access_tags || [];
+                  return (
+                    <tr key={user.id}>
+                      <td>
+                        <div class="flex items-center gap-3">
+                          <div class="w-8 h-8 rounded-[7px] bg-bg-2 border border-border-soft grid place-items-center font-mono text-[11px] text-muted font-medium">
+                            {(user.display_name || user.email).charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <b class="text-[13px]">{user.display_name}</b>
+                            <span class="block text-subtle font-mono text-[10.5px] mt-0.5">{user.email}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <select
+                          class="ln-input text-[12px] w-auto py-1 px-2"
+                          value={user.role}
+                          onChange$={(_, el) => {
+                            updateRole(user.id, el.value as UserRole);
+                          }}
+                        >
+                          {roles.map((r) => (
+                            <option key={r} value={r}>{r}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td class="mono muted text-[11px]">
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </td>
+                      <td>
+                        <div class="flex flex-wrap gap-1">
+                          {user.role === "admin" ? (
+                            <span class="ln-pill ok">full access</span>
+                          ) : (
+                            <>
+                              {Object.entries(tagsByCategory).map(([, tags]) =>
+                                tags.map((tag) => {
+                                  const hasAccess = userTags.some((ut) => ut.id === tag.id);
+                                  return (
+                                    <button
+                                      key={tag.id}
+                                      class={`ln-pill cursor-pointer ${hasAccess ? "ok" : ""}`}
+                                      onClick$={() => toggleTagAccess(user.id, tag.id, userTags)}
+                                    >
+                                      {tag.name}
+                                    </button>
+                                  );
+                                }),
+                              )}
+                              {allTags.value.length === 0 && (
+                                <span class="text-subtle text-[11px] font-mono italic">no tags</span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

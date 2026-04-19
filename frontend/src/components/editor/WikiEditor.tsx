@@ -42,7 +42,6 @@ export const WikiEditor = component$<Props>(({ content, title, onSave$ }) => {
     if (!md) return;
     previewLoading.value = true;
     try {
-      // If content is already HTML (imported pages), show it directly
       if (md.trimStart().startsWith("<")) {
         preview.value = md;
       } else {
@@ -109,19 +108,15 @@ export const WikiEditor = component$<Props>(({ content, title, onSave$ }) => {
     }
   });
 
-  // Keyboard shortcuts
   useVisibleTask$(() => {
     const handler = (e: KeyboardEvent) => {
-      // F11 or Cmd+Shift+F for fullscreen
       if (e.key === "F11" || (e.metaKey && e.shiftKey && e.key === "f")) {
         e.preventDefault();
         fullscreen.value = !fullscreen.value;
       }
-      // Escape to exit fullscreen
       if (e.key === "Escape" && fullscreen.value) {
         fullscreen.value = false;
       }
-      // Cmd+S to save
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         handleSave();
@@ -131,7 +126,6 @@ export const WikiEditor = component$<Props>(({ content, title, onSave$ }) => {
     return () => document.removeEventListener("keydown", handler);
   });
 
-  // Trigger preview when content prop changes (e.g. async load)
   useVisibleTask$(({ track }) => {
     const md = track(() => markdown.value);
     if (md && (mode.value === "full" || mode.value === "preview")) {
@@ -143,19 +137,18 @@ export const WikiEditor = component$<Props>(({ content, title, onSave$ }) => {
   const showPreview = mode.value === "preview" || mode.value === "full";
 
   const containerClass = fullscreen.value
-    ? "fixed inset-0 z-[90] bg-surface flex flex-col"
+    ? "fixed inset-0 z-[90] bg-bg flex flex-col"
     : "flex flex-col h-full";
 
   return (
     <div class={containerClass}>
       {/* Top bar */}
-      <div class="flex items-center gap-1 border-b border-border px-3 py-2 bg-elevated shrink-0 flex-wrap">
-        {/* Toolbar buttons */}
+      <div class="flex items-center gap-1 border-b border-border-soft px-3 py-2 bg-bg-2 shrink-0 flex-wrap">
         {showEditor &&
           TOOLBAR.map((item) => (
             <button
               key={item.label}
-              class="px-2 py-1 text-xs font-medium text-muted hover:text-text hover:bg-surface-hover rounded transition-colors"
+              class="px-2 py-1 text-[11px] font-mono text-muted hover:text-text hover:bg-surface rounded-[5px] transition-colors"
               onClick$={() => insertMarkdown(item.before, item.after, item.block)}
               title={item.label}
             >
@@ -163,37 +156,26 @@ export const WikiEditor = component$<Props>(({ content, title, onSave$ }) => {
             </button>
           ))}
 
-        {showEditor && <div class="w-px h-5 bg-border mx-1" />}
+        {showEditor && <div class="w-px h-5 bg-border-soft mx-1" />}
 
         {/* Mode tabs */}
         <button
-          class={[
-            "px-2.5 py-1 text-xs font-medium rounded transition-colors",
-            mode.value === "edit"
-              ? "bg-accent text-white"
-              : "text-muted hover:text-text hover:bg-surface-hover",
-          ]}
-          onClick$={() => {
-            mode.value = "edit";
-          }}
+          class={`px-2.5 py-1 text-[11px] font-mono rounded-[5px] transition-colors ${
+            mode.value === "edit" ? "bg-surface text-text border border-border-soft" : "text-subtle hover:text-text"
+          }`}
+          onClick$={() => { mode.value = "edit"; }}
         >
           Edit
         </button>
         <button
-          class={[
-            "px-2.5 py-1 text-xs font-medium rounded transition-colors",
-            mode.value === "preview"
-              ? "bg-accent text-white"
-              : "text-muted hover:text-text hover:bg-surface-hover",
-          ]}
-          onClick$={async () => {
-            mode.value = "preview";
-            await fetchPreview();
-          }}
+          class={`px-2.5 py-1 text-[11px] font-mono rounded-[5px] transition-colors ${
+            mode.value === "preview" ? "bg-surface text-text border border-border-soft" : "text-subtle hover:text-text"
+          }`}
+          onClick$={async () => { mode.value = "preview"; await fetchPreview(); }}
         >
           Preview
         </button>
-        <label class="flex items-center gap-1.5 px-2 py-1 text-xs text-muted cursor-pointer">
+        <label class="flex items-center gap-1.5 px-2 py-1 text-[11px] font-mono text-subtle cursor-pointer">
           <input
             type="checkbox"
             checked={mode.value === "full"}
@@ -208,40 +190,37 @@ export const WikiEditor = component$<Props>(({ content, title, onSave$ }) => {
 
         <div class="flex-1" />
 
-        {/* Status + actions */}
         {dirty.value && (
-          <span class="text-xs text-warning mr-2">Unsaved</span>
+          <span class="ln-pill warn mr-2">Unsaved</span>
         )}
         {saving.value && (
-          <span class="text-xs text-accent mr-2">Saving...</span>
+          <span class="ln-pill run mr-2">Saving...</span>
         )}
 
         <button
-          class="px-3 py-1 text-xs font-medium bg-accent text-white rounded hover:bg-accent-hover transition-colors disabled:opacity-50"
+          class="ln-btn ln-btn-primary text-[12px] py-1"
           disabled={saving.value || !dirty.value}
           onClick$={handleSave}
         >
           Save
         </button>
 
-        <div class="w-px h-5 bg-border mx-1" />
+        <div class="w-px h-5 bg-border-soft mx-1" />
 
         <button
-          class="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted hover:text-text hover:bg-surface-hover rounded transition-colors"
-          onClick$={() => {
-            fullscreen.value = !fullscreen.value;
-          }}
+          class="ln-btn ln-btn-ghost text-[11px]"
+          onClick$={() => { fullscreen.value = !fullscreen.value; }}
         >
           {fullscreen.value ? (
             <>
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
               </svg>
               Exit
             </>
           ) : (
             <>
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
               </svg>
               Fullscreen
@@ -252,27 +231,26 @@ export const WikiEditor = component$<Props>(({ content, title, onSave$ }) => {
 
       {/* Title bar in fullscreen */}
       {fullscreen.value && title && (
-        <div class="px-4 py-2 border-b border-border bg-elevated/50 shrink-0">
-          <span class="text-sm font-medium text-text">{title}</span>
+        <div class="px-4 py-2 border-b border-border-soft bg-bg-2 shrink-0">
+          <span class="text-[13px] font-medium">{title}</span>
         </div>
       )}
 
       {/* Editor + Preview panes */}
       <div class="flex flex-1 min-h-0 overflow-hidden">
-        {/* Editor pane */}
         {showEditor && (
           <div class={[
             "flex flex-col min-h-0 overflow-hidden",
-            mode.value === "full" ? "w-1/2 border-r border-border" : "w-full",
+            mode.value === "full" ? "w-1/2 border-r border-border-soft" : "w-full",
           ]}>
             {mode.value === "full" && (
-              <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted border-b border-border bg-elevated/30">
+              <div class="px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-subtle border-b border-border-soft bg-bg-2">
                 Markdown
               </div>
             )}
             <textarea
               data-wiki-textarea
-              class="flex-1 w-full bg-surface p-4 text-text text-sm font-mono resize-none focus:outline-none leading-relaxed overflow-y-auto"
+              class="flex-1 w-full bg-surface p-4 text-text text-[13.5px] font-mono resize-none focus:outline-none leading-relaxed overflow-y-auto"
               style={fullscreen.value ? undefined : { minHeight: "500px" }}
               value={markdown.value}
               onInput$={(_, el) => handleInput(el.value)}
@@ -291,25 +269,24 @@ export const WikiEditor = component$<Props>(({ content, title, onSave$ }) => {
           </div>
         )}
 
-        {/* Preview pane */}
         {showPreview && (
           <div class={[
             "flex flex-col min-h-0 overflow-hidden",
             mode.value === "full" ? "w-1/2" : "w-full",
           ]}>
             {mode.value === "full" && (
-              <div class="flex items-center justify-between px-3 py-1.5 border-b border-border bg-elevated/30">
-                <span class="text-[10px] font-semibold uppercase tracking-wider text-muted">
+              <div class="flex items-center justify-between px-3 py-1.5 border-b border-border-soft bg-bg-2">
+                <span class="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle">
                   Preview
                 </span>
                 {previewLoading.value && (
-                  <span class="text-[10px] text-accent">Rendering...</span>
+                  <span class="ln-pill run text-[9px]">Rendering</span>
                 )}
               </div>
             )}
             <div
               class="flex-1 ln-prose p-6 overflow-y-auto bg-surface"
-              dangerouslySetInnerHTML={preview.value || "<p class='text-muted'>Preview will appear here...</p>"}
+              dangerouslySetInnerHTML={preview.value || "<p class='text-subtle'>Preview will appear here...</p>"}
             />
           </div>
         )}

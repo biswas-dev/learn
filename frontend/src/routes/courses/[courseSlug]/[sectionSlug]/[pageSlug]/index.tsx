@@ -58,24 +58,20 @@ export default component$(() => {
         course.value = courseData;
         page.value = pageData;
 
-        // Save bookmark but DON'T mark as read yet — wait for 60% scroll
         saveBookmark(
           courseData.slug,
           pageData.id,
           `/courses/${cs}/${ss}/${ps}`,
           pageData.title,
         );
-        // Load completed pages from localStorage
         const localCompleted = getCompletedPages(courseData.slug);
         completedIds.value = [...localCompleted];
         pageMarkedComplete.value = localCompleted.has(pageData.id);
 
-        // Load user info + record course view + load server progress + comments
         if (localStorage.getItem("learn_token")) {
           get<User>("/me").then((u) => { user.value = u; }).catch(() => {});
           apiPost(`/courses/${courseData.id}/view`, {}).catch(() => {});
 
-          // Merge server-side progress with localStorage
           get<{ user_id: number; page_id: number; completed_at: string }[]>(
             `/courses/${courseData.id}/progress`
           ).then((serverProgress) => {
@@ -83,7 +79,6 @@ export default component$(() => {
               const merged = new Set(localCompleted);
               for (const p of serverProgress) {
                 merged.add(p.page_id);
-                // Sync to localStorage
                 markPageRead(courseData.slug, p.page_id);
               }
               completedIds.value = [...merged];
@@ -92,22 +87,15 @@ export default component$(() => {
 
           if (pageData.id) {
             get<Comment[]>(`/pages/${pageData.id}/comments`)
-              .then((c) => {
-                comments.value = c;
-              })
+              .then((c) => { comments.value = c; })
               .catch(() => {});
           }
         }
       })
-      .catch((err) => {
-        error.value = err.message;
-      })
-      .finally(() => {
-        loading.value = false;
-      });
+      .catch((err) => { error.value = err.message; })
+      .finally(() => { loading.value = false; });
   });
 
-  // Compute prev/next navigation
   const prevNext = (() => {
     if (!course.value?.sections) return { prev: undefined, next: undefined };
     const allPages: { href: string; title: string }[] = [];
@@ -129,34 +117,52 @@ export default component$(() => {
 
   if (loading.value) {
     return (
-      <main class="max-w-7xl mx-auto px-4 py-10">
-        <p class="text-muted">Loading page...</p>
+      <main class="max-w-7xl mx-auto px-7 py-10">
+        <div class="animate-pulse">
+          <div class="h-6 bg-border-soft rounded w-48 mb-4" />
+          <div class="h-4 bg-border-soft rounded w-full mb-2" />
+          <div class="h-4 bg-border-soft rounded w-3/4 mb-2" />
+          <div class="h-4 bg-border-soft rounded w-5/6" />
+        </div>
       </main>
     );
   }
 
   if (error.value || !page.value) {
     return (
-      <main class="max-w-7xl mx-auto px-4 py-10">
-        <p class="text-failure">{error.value || "Page not found"}</p>
-        <Link href={`/courses/${resolvedCourseSlug.value}`} class="text-accent text-sm mt-2 inline-block">
-          Back to course
-        </Link>
+      <main class="max-w-7xl mx-auto px-7 py-10">
+        <div class="ln-panel">
+          <div class="ln-panel-body">
+            <p class="text-failure text-[13px]">{error.value || "Page not found"}</p>
+            <Link href={`/courses/${resolvedCourseSlug.value}`} class="text-accent text-[13px] mt-2 inline-block">
+              Back to course
+            </Link>
+          </div>
+        </div>
       </main>
     );
   }
 
   return (
-    <main class="max-w-7xl mx-auto px-4 py-10">
+    <main class="max-w-7xl mx-auto px-7 py-10">
+      {/* Breadcrumb */}
+      <div class="ln-breadcrumb mb-6">
+        <Link href="/dashboard" class="hover:text-text transition-colors">learn</Link>
+        <span class="text-border-soft">/</span>
+        <Link href={`/courses/${resolvedCourseSlug.value}`} class="hover:text-text transition-colors">
+          {course.value?.title}
+        </Link>
+        <span class="text-border-soft">/</span>
+        <b class="truncate max-w-[300px] inline-block">{page.value.title}</b>
+      </div>
+
       <div class="lg:flex lg:gap-8">
-        {/* Sidebar TOC - hidden on mobile, toggle button shown */}
+        {/* Sidebar TOC */}
         <button
-          class="lg:hidden mb-4 text-sm text-accent flex items-center gap-1"
-          onClick$={() => {
-            showToc.value = !showToc.value;
-          }}
+          class="lg:hidden mb-4 ln-btn ln-btn-ghost text-[13px]"
+          onClick$={() => { showToc.value = !showToc.value; }}
         >
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
           </svg>
           Table of Contents
@@ -169,13 +175,17 @@ export default component$(() => {
               showToc.value ? "block" : "hidden",
             ]}
           >
-            <div class="sticky top-20">
-              <TableOfContents
-                courseSlug={resolvedCourseSlug.value}
-                sections={course.value.sections}
-                currentPageSlug={resolvedPageSlug.value}
-                completedPageIds={completedIds.value}
-              />
+            <div class="sticky top-[75px]">
+              <div class="ln-panel">
+                <div class="ln-panel-body">
+                  <TableOfContents
+                    courseSlug={resolvedCourseSlug.value}
+                    sections={course.value.sections}
+                    currentPageSlug={resolvedPageSlug.value}
+                    completedPageIds={completedIds.value}
+                  />
+                </div>
+              </div>
             </div>
           </aside>
         )}
@@ -183,17 +193,18 @@ export default component$(() => {
         {/* Page content */}
         <article class="flex-1 min-w-0">
           <div class="flex items-start justify-between gap-4 mb-6">
-            <h1 class="text-2xl font-bold text-text">{page.value.title}</h1>
+            <h1 class="text-[24px] font-semibold tracking-[-0.02em]">{page.value.title}</h1>
             {user.value && (user.value.role === "admin" || user.value.role === "editor") && course.value && page.value && (
               <Link
                 href={`/dashboard/courses/${course.value.id}/sections/${page.value.section_id}/pages/${page.value.id}`}
-                class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted hover:text-accent bg-elevated border border-border rounded-lg hover:border-accent/30 transition-all"
+                class="ln-btn ln-btn-ghost text-[12px] shrink-0"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Edit
               </Link>
             )}
           </div>
+
           <div
             class="ln-prose"
             dangerouslySetInnerHTML={page.value.content_html || ""}
@@ -201,27 +212,34 @@ export default component$(() => {
 
           <PageNavigation prev={prevNext.prev} next={prevNext.next} />
 
-          {/* Comments section */}
+          {/* Comments */}
           {localStorage.getItem("learn_token") && (
-            <section class="mt-10 pt-6 border-t border-border">
-              <h3 class="text-lg font-semibold text-text mb-4">
-                Comments ({comments.value.length})
-              </h3>
-
-              {comments.value.map((c) => (
-                <div key={c.id} class="mb-4 p-4 bg-elevated border border-border rounded-md">
-                  <div class="flex items-center gap-2 mb-2">
-                    <span class="text-sm font-medium text-text">{c.author_name}</span>
-                    <span class="text-xs text-muted">
-                      {new Date(c.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <p class="text-sm text-text">{c.content}</p>
+            <section class="mt-10 pt-6 border-t border-border-soft">
+              <div class="ln-panel">
+                <div class="ln-panel-head">
+                  <h3>Comments <small>{comments.value.length}</small></h3>
                 </div>
-              ))}
+                <div class="ln-panel-body p0">
+                  {comments.value.map((c) => (
+                    <div key={c.id} class="px-[18px] py-3 border-b border-dashed border-border-soft last:border-0">
+                      <div class="flex items-center gap-2 mb-1.5">
+                        <div class="w-6 h-6 rounded-[5px] bg-bg-2 border border-border-soft grid place-items-center font-mono text-[9px] text-muted font-medium">
+                          {c.author_name.charAt(0).toUpperCase()}
+                        </div>
+                        <span class="text-[13px] font-medium">{c.author_name}</span>
+                        <span class="text-[11px] text-subtle font-mono">
+                          {new Date(c.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p class="text-[13px] text-muted">{c.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               <form
                 preventdefault:submit
+                class="mt-4"
                 onSubmit$={async () => {
                   if (!commentText.value.trim() || !page.value) return;
                   commentLoading.value = true;
@@ -240,16 +258,14 @@ export default component$(() => {
                 }}
               >
                 <textarea
-                  class="w-full bg-surface border border-border rounded-md p-3 text-text text-sm focus:outline-none focus:border-accent min-h-[80px]"
+                  class="ln-input min-h-[80px] resize-y"
                   placeholder="Leave a comment..."
                   value={commentText.value}
-                  onInput$={(_, el) => {
-                    commentText.value = el.value;
-                  }}
+                  onInput$={(_, el) => { commentText.value = el.value; }}
                 />
                 <button
                   type="submit"
-                  class="mt-2 px-4 py-1.5 bg-accent text-white text-sm rounded-md hover:bg-accent-hover transition-colors disabled:opacity-50"
+                  class="mt-2 ln-btn ln-btn-primary text-[13px]"
                   disabled={commentLoading.value}
                 >
                   {commentLoading.value ? "Posting..." : "Post Comment"}

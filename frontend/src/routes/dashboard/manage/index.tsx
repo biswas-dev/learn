@@ -34,65 +34,97 @@ export default component$(() => {
   });
 
   return (
-    <div class="p-6 sm:p-8">
-      <div class="flex items-center justify-between mb-6">
-        <h1 class="text-xl font-bold text-text">Manage Courses</h1>
-        <span class="text-sm text-muted">{courses.value.length} courses</span>
-      </div>
-
-      {/* Search filter */}
-      <div class="mb-4">
-        <input
-          type="text"
-          value={search.value}
-          onInput$={(_, el) => { onSearch(el.value); }}
-          placeholder="Filter courses..."
-          class="w-full max-w-md px-4 py-2 rounded-lg bg-surface border border-border text-text placeholder-muted text-sm focus:outline-none focus:border-accent"
-        />
-      </div>
-
-      {loading.value && <p class="text-muted">Loading...</p>}
-
-      <div class="space-y-2">
-        {filtered.value.map((course) => (
-          <div
-            key={course.id}
-            class="flex items-center justify-between p-3 bg-elevated border border-border rounded-lg hover:border-accent/30 transition-colors"
-          >
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <Link
-                  href={`/courses/${course.slug}/`}
-                  class="text-sm font-medium text-text hover:text-accent transition-colors truncate"
-                >
-                  {course.title}
-                </Link>
-                {course.is_published ? (
-                  <span class="shrink-0 text-xs px-1.5 py-0.5 bg-success/10 text-success rounded">Published</span>
-                ) : (
-                  <span class="shrink-0 text-xs px-1.5 py-0.5 bg-warning/10 text-warning rounded">Draft</span>
-                )}
-                {course.is_protected && (
-                  <span class="shrink-0 text-xs px-1.5 py-0.5 bg-accent/10 text-accent rounded">Protected</span>
-                )}
-              </div>
-              <p class="text-xs text-muted mt-0.5">
-                {course.slug} &middot; {course.section_count ?? 0} sections &middot; {course.page_count ?? 0} pages
-              </p>
-            </div>
-            <Link
-              href={`/dashboard/courses/${course.id}`}
-              class="shrink-0 ml-4 flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted hover:text-accent bg-surface border border-border rounded-lg hover:border-accent/30 transition-all"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Edit
-            </Link>
+    <div class="p-6 lg:px-8 lg:pb-16 max-w-[1500px]">
+      {/* Page top */}
+      <div class="flex items-center justify-between mb-[18px] gap-4">
+        <div class="ln-breadcrumb">
+          learn <span class="text-border-soft">/</span> <b>manage courses</b>
+        </div>
+        <div class="flex gap-2 items-center">
+          <div class="flex items-center gap-2 bg-surface border border-border-soft px-2.5 py-1.5 rounded-lg text-subtle font-mono text-[12px] w-[240px]">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input
+              type="text"
+              value={search.value}
+              onInput$={(_, el) => { onSearch(el.value); }}
+              placeholder="Filter courses..."
+              class="bg-transparent border-0 outline-none text-text font-mono text-[12px] flex-1"
+              autoComplete="off"
+            />
           </div>
-        ))}
+          <Link href="/dashboard/courses/new" class="ln-btn ln-btn-primary text-[13px]">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14m-7-7h14"/></svg>
+            New
+          </Link>
+        </div>
       </div>
+
+      {/* Greet */}
+      <div class="ln-greet">
+        <h1>Manage Courses <em>{courses.value.length}</em></h1>
+      </div>
+
+      {loading.value && (
+        <div class="animate-pulse space-y-2">
+          {[1,2,3].map((i) => <div key={i} class="h-14 bg-border-soft rounded-xl" />)}
+        </div>
+      )}
+
+      {!loading.value && (
+        <div class="ln-panel">
+          <div class="ln-panel-body p0">
+            <table class="ln-tbl">
+              <thead>
+                <tr>
+                  <th>Course</th>
+                  <th>Status</th>
+                  <th>Content</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.value.map((course) => (
+                  <tr key={course.id}>
+                    <td>
+                      <Link href={`/courses/${course.slug}/`} class="hover:text-accent transition-colors">
+                        <b>{course.title}</b>
+                        <span class="block text-subtle font-mono text-[10.5px] mt-0.5">{course.slug}</span>
+                      </Link>
+                    </td>
+                    <td>
+                      <div class="flex gap-1.5">
+                        {course.is_published ? (
+                          <span class="ln-pill ok">Published</span>
+                        ) : (
+                          <span class="ln-pill warn">Draft</span>
+                        )}
+                        {course.is_protected && (
+                          <span class="ln-pill run">Protected</span>
+                        )}
+                      </div>
+                    </td>
+                    <td class="mono">
+                      {course.section_count ?? 0} sections &middot; {course.page_count ?? 0} pages
+                    </td>
+                    <td>
+                      <Link
+                        href={`/dashboard/courses/${course.id}`}
+                        class="ln-btn ln-btn-ghost text-[12px]"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Edit
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {!loading.value && filtered.value.length === 0 && (
-        <p class="text-muted text-center py-8">No courses match your filter.</p>
+        <div class="text-center py-16 text-subtle">No courses match your filter.</div>
       )}
     </div>
   );

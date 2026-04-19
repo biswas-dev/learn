@@ -32,10 +32,8 @@ export const ReadingProgress = component$<Props>(({ onComplete$, isComplete = fa
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll(); // initial check
+    handleScroll();
 
-    // Also fire on navigation away (clicking next/prev link)
-    // This ensures completion is saved even if user clicks away mid-scroll
     const handleBeforeUnload = () => {
       if (progress.value >= threshold && !fired.value) {
         onComplete$?.();
@@ -44,7 +42,6 @@ export const ReadingProgress = component$<Props>(({ onComplete$, isComplete = fa
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     cleanup(() => {
-      // Fire on cleanup (Qwik navigation) if threshold was reached
       if (progress.value >= threshold && !fired.value) {
         onComplete$?.();
       }
@@ -59,7 +56,6 @@ export const ReadingProgress = component$<Props>(({ onComplete$, isComplete = fa
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progress.value / 100) * circumference;
   const isComplete_ = progress.value >= 100;
-  const color = isComplete_ ? "#34d399" : "#818cf8";
 
   return (
     <div class="fixed bottom-6 right-6 z-40 opacity-70 hover:opacity-100 transition-opacity">
@@ -68,8 +64,8 @@ export const ReadingProgress = component$<Props>(({ onComplete$, isComplete = fa
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          fill="#141621"
-          stroke="#1e2235"
+          fill="var(--color-bg-2)"
+          stroke="var(--color-border-soft)"
           stroke-width={stroke}
         />
         <circle
@@ -77,7 +73,7 @@ export const ReadingProgress = component$<Props>(({ onComplete$, isComplete = fa
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={color}
+          stroke="var(--color-accent)"
           stroke-width={stroke}
           stroke-linecap="round"
           stroke-dasharray={circumference}
@@ -92,7 +88,7 @@ export const ReadingProgress = component$<Props>(({ onComplete$, isComplete = fa
           height="18"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#34d399"
+          stroke="var(--color-accent)"
           stroke-width="3"
           stroke-linecap="round"
           stroke-linejoin="round"
