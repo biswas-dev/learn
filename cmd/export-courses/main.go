@@ -36,7 +36,7 @@ func main() {
 	ctx := context.Background()
 
 	// Fetch all courses with full content
-	courses, err := db.ListCourses(ctx, true, true)
+	courses, err := db.ListCourses(ctx, true, 0, true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to list courses: %v\n", err)
 		os.Exit(1)

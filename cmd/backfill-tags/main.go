@@ -239,7 +239,7 @@ func main() {
 	ctx := context.Background()
 
 	// Get all courses from DB
-	courses, err := s.ListCourses(ctx, true, true)
+	courses, err := s.ListCourses(ctx, true, 0, true)
 	if err != nil {
 		log.Fatal().Err(err).Msg("list courses from DB")
 	}

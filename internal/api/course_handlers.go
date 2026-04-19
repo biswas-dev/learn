@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -26,10 +27,14 @@ func slugify(s string) string {
 func (h *CourseHandler) List(w http.ResponseWriter, r *http.Request) {
 	user := UserFromCtx(r.Context())
 	includeUnpublished := false
-	includeProtected := false
-	if user != nil && user.Role.Level() >= models.RoleEditor.Level() {
-		includeUnpublished = true
-		includeProtected = true
+	isAdmin := false
+	var userID int64
+	if user != nil {
+		userID = user.ID
+		isAdmin = user.Role == models.RoleAdmin
+		if user.Role.Level() >= models.RoleEditor.Level() {
+			includeUnpublished = true
+		}
 	}
 
 	// If pagination params present, use paginated listing
@@ -47,7 +52,7 @@ func (h *CourseHandler) List(w http.ResponseWriter, r *http.Request) {
 		if size <= 0 {
 			size = 24
 		}
-		result, err := h.store.ListCoursesPaginated(r.Context(), page, size, category, tag, includeProtected)
+		result, err := h.store.ListCoursesPaginated(r.Context(), page, size, category, tag, userID, isAdmin)
 		if err != nil {
 			jsonError(w, "failed to list courses", http.StatusInternalServerError)
 			return
@@ -58,7 +63,7 @@ func (h *CourseHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Default: return all courses (backward compatible)
-	courses, err := h.store.ListCourses(r.Context(), includeUnpublished, includeProtected)
+	courses, err := h.store.ListCourses(r.Context(), includeUnpublished, userID, isAdmin)
 	if err != nil {
 		jsonError(w, "failed to list courses", http.StatusInternalServerError)
 		return
@@ -81,7 +86,15 @@ func (h *CourseHandler) Search(w http.ResponseWriter, r *http.Request) {
 		limit = 20
 	}
 
-	results, err := h.store.SearchCourses(r.Context(), query, limit)
+	user := UserFromCtx(r.Context())
+	var userID int64
+	isAdmin := false
+	if user != nil {
+		userID = user.ID
+		isAdmin = user.Role == models.RoleAdmin
+	}
+
+	results, err := h.store.SearchCourses(r.Context(), query, limit, userID, isAdmin)
 	if err != nil {
 		jsonError(w, "search failed", http.StatusInternalServerError)
 		return
@@ -99,9 +112,28 @@ func (h *CourseHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := UserFromCtx(r.Context())
-	if course.IsProtected && (user == nil || user.Role.Level() < models.RoleEditor.Level()) {
-		jsonError(w, "access denied", http.StatusForbidden)
-		return
+	if course.IsProtected {
+		// Admin always has access; others need matching tag access
+		hasAccess := user != nil && user.Role == models.RoleAdmin
+		if !hasAccess && user != nil {
+			tags, _ := h.store.GetUserAccessTags(r.Context(), user.ID)
+			courseTags, _ := h.store.ListCourseTags(r.Context(), course.ID)
+			for _, ut := range tags {
+				for _, ct := range courseTags {
+					if ut.ID == ct.ID {
+						hasAccess = true
+						break
+					}
+				}
+				if hasAccess {
+					break
+				}
+			}
+		}
+		if !hasAccess {
+			jsonError(w, "access denied", http.StatusForbidden)
+			return
+		}
 	}
 	if !course.IsPublished && (user == nil || user.Role.Level() < models.RoleEditor.Level()) {
 		jsonError(w, "course not found", http.StatusNotFound)
@@ -127,6 +159,7 @@ func (h *CourseHandler) Create(w http.ResponseWriter, r *http.Request) {
 	user := UserFromCtx(r.Context())
 	var req struct {
 		Title       string `json:"title"`
+		Slug        string `json:"slug"`
 		Description string `json:"description"`
 		IsProtected bool   `json:"is_protected"`
 	}
@@ -139,14 +172,20 @@ func (h *CourseHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slug := req.Slug
+	if slug == "" {
+		slug = slugify(req.Title)
+	}
+
 	course := &models.Course{
 		Title:       req.Title,
-		Slug:        slugify(req.Title),
+		Slug:        slug,
 		Description: req.Description,
 		IsProtected: req.IsProtected,
 		CreatedBy:   user.ID,
 	}
 	if err := h.store.CreateCourse(r.Context(), course); err != nil {
+		log.Printf("CreateCourse error (slug=%s): %v", course.Slug, err)
 		jsonError(w, "failed to create course", http.StatusInternalServerError)
 		return
 	}

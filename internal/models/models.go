@@ -36,6 +36,7 @@ type User struct {
 	Role         UserRole `json:"role"`
 	CreatedAt    string   `json:"created_at"`
 	UpdatedAt    string   `json:"updated_at"`
+	AccessTags   []Tag    `json:"access_tags,omitempty"`
 }
 
 type Course struct {

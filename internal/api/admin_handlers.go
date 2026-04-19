@@ -32,6 +32,23 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, http.StatusOK, users)
 }
 
+func (h *AdminHandler) ListUsersWithAccess(w http.ResponseWriter, r *http.Request) {
+	users, err := h.store.ListUsers(r.Context())
+	if err != nil {
+		jsonError(w, "failed to list users", http.StatusInternalServerError)
+		return
+	}
+	if users == nil {
+		users = []models.User{}
+	}
+	// Enrich each user with their access tags
+	for i := range users {
+		tags, _ := h.store.GetUserAccessTags(r.Context(), users[i].ID)
+		users[i].AccessTags = tags
+	}
+	jsonResp(w, http.StatusOK, users)
+}
+
 func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
 	if err != nil {
@@ -57,6 +74,30 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResp(w, http.StatusOK, map[string]string{"message": "role updated"})
+}
+
+func (h *AdminHandler) UpdateUserTagAccess(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
+	if err != nil {
+		jsonError(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		TagIDs []int64 `json:"tag_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.store.SetUserTagAccess(r.Context(), id, req.TagIDs); err != nil {
+		jsonError(w, "failed to update tag access", http.StatusInternalServerError)
+		return
+	}
+
+	tags, _ := h.store.GetUserAccessTags(r.Context(), id)
+	jsonResp(w, http.StatusOK, map[string]any{"access_tags": tags})
 }
 
 func (h *AdminHandler) SystemInfo(w http.ResponseWriter, r *http.Request) {

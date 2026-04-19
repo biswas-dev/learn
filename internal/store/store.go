@@ -17,6 +17,10 @@ type Store interface {
 	UpdateUser(ctx context.Context, user *models.User) error
 	ListUsers(ctx context.Context) ([]models.User, error)
 	UpdateUserRole(ctx context.Context, id int64, role models.UserRole) error
+	GetUserAccessTags(ctx context.Context, userID int64) ([]models.Tag, error)
+	GrantTagAccess(ctx context.Context, userID, tagID int64) error
+	RevokeTagAccess(ctx context.Context, userID, tagID int64) error
+	SetUserTagAccess(ctx context.Context, userID int64, tagIDs []int64) error
 
 	// Courses
 	CreateCourse(ctx context.Context, course *models.Course) error
@@ -24,7 +28,7 @@ type Store interface {
 	GetCourseBySlug(ctx context.Context, slug string) (*models.Course, error)
 	UpdateCourse(ctx context.Context, course *models.Course) error
 	DeleteCourse(ctx context.Context, id int64) error
-	ListCourses(ctx context.Context, includeUnpublished, includeProtected bool) ([]models.Course, error)
+	ListCourses(ctx context.Context, includeUnpublished bool, userID int64, isAdmin bool) ([]models.Course, error)
 	SetCoursePublished(ctx context.Context, id int64, published bool) error
 
 	// Sections
@@ -72,12 +76,12 @@ type Store interface {
 	ListTagsWithCounts(ctx context.Context) ([]models.Tag, error)
 
 	// Search
-	SearchCourses(ctx context.Context, query string, limit int) ([]models.CourseSummary, error)
+	SearchCourses(ctx context.Context, query string, limit int, userID int64, isAdmin bool) ([]models.CourseSummary, error)
 	IndexCourseForSearch(ctx context.Context, courseID int64) error
 
 	// Dashboard
-	GetDashboard(ctx context.Context, userID int64) (*models.DashboardResponse, error)
-	ListCoursesPaginated(ctx context.Context, page, size int, category, tag string, includeProtected bool) (*models.PaginatedCourses, error)
+	GetDashboard(ctx context.Context, userID int64, isAdmin bool) (*models.DashboardResponse, error)
+	ListCoursesPaginated(ctx context.Context, page, size int, category, tag string, userID int64, isAdmin bool) (*models.PaginatedCourses, error)
 
 	// Course views
 	RecordCourseView(ctx context.Context, userID, courseID int64) error

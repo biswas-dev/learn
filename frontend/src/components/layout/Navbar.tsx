@@ -25,38 +25,40 @@ export const Navbar = component$(() => {
   });
 
   return (
-    <nav class="border-b border-border bg-elevated/80 backdrop-blur-sm sticky top-0 z-50">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
-        <div class="flex items-center gap-6">
-          <Link href="/" class="text-lg font-bold text-accent">
-            Learn
-          </Link>
+    <nav class="ln-nav">
+      <div class="ln-nav-inner">
+        <Link href="/" class="ln-brand">
+          <span class="ln-brand-mark">L</span>
+          <span>Learn</span>
+        </Link>
+
+        <div class="flex-1 flex items-center gap-4">
           <Link
             href="/dashboard"
-            class="text-sm text-muted hover:text-text transition-colors"
+            class="text-[13.5px] text-muted hover:text-text transition-colors px-3 py-1.5 rounded-[7px] hover:bg-surface"
           >
             Library
           </Link>
         </div>
 
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2">
           <SearchBar />
 
           {user.value ? (
             <>
               {(user.value.role === "admin" || user.value.role === "editor") && (
                 <Link
-                  href="/dashboard/courses/new"
-                  class="text-sm text-muted hover:text-text transition-colors"
+                  href="/dashboard/manage"
+                  class="ln-btn ln-btn-ghost text-[13px]"
                 >
                   Admin
                 </Link>
               )}
-              <span class="text-sm text-muted hidden sm:inline">
+              <span class="text-[12px] text-subtle font-mono hidden sm:inline">
                 {user.value.display_name}
               </span>
               <button
-                class="text-sm text-muted hover:text-failure transition-colors"
+                class="ln-btn ln-btn-ghost text-[13px]"
                 onClick$={() => {
                   clearToken();
                   user.value = null;
@@ -68,17 +70,11 @@ export const Navbar = component$(() => {
             </>
           ) : (
             <>
-              <Link
-                href="/auth/login"
-                class="text-sm text-muted hover:text-text transition-colors"
-              >
-                Login
+              <Link href="/auth/login" class="ln-btn ln-btn-ghost text-[13px]">
+                Sign in
               </Link>
-              <Link
-                href="/auth/signup"
-                class="text-sm px-3 py-1.5 bg-accent text-white rounded-md hover:bg-accent-hover transition-colors"
-              >
-                Sign Up
+              <Link href="/auth/signup" class="ln-btn ln-btn-primary text-[13px]">
+                Get started
               </Link>
             </>
           )}

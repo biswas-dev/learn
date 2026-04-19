@@ -7,6 +7,7 @@ export interface User {
   role: UserRole;
   created_at: string;
   updated_at: string;
+  access_tags?: Tag[];
 }
 
 export interface Course {

@@ -134,8 +134,9 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 		// Admin
 		r.Group(func(r chi.Router) {
 			r.Use(RequireRole(models.RoleAdmin))
-			r.Get("/api/admin/users", adminH.ListUsers)
+			r.Get("/api/admin/users", adminH.ListUsersWithAccess)
 			r.Patch("/api/admin/users/{userId}/role", adminH.UpdateUserRole)
+			r.Put("/api/admin/users/{userId}/tags", adminH.UpdateUserTagAccess)
 			r.Get("/api/admin/system-info", adminH.SystemInfo)
 		})
 	})

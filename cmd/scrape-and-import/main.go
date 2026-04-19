@@ -92,11 +92,24 @@ func main() {
 	fmt.Printf("Course: %s\n", title)
 
 	// Step 3: Create course in learn
-	courseResp := learnPost("/api/courses", map[string]any{
+	// Derive slug from the educative course URL path
+	slug := os.Getenv("EDU_COURSE_SLUG")
+	if slug == "" {
+		// Extract from URL: https://www.educative.io/courses/<slug>/
+		parts := strings.Split(strings.Trim(courseURL, "/"), "/")
+		if len(parts) > 0 {
+			slug = parts[len(parts)-1]
+		}
+	}
+	createReq := map[string]any{
 		"title":        title,
 		"description":  desc,
 		"is_protected": true,
-	})
+	}
+	if slug != "" {
+		createReq["slug"] = slug
+	}
+	courseResp := learnPost("/api/courses", createReq)
 	if courseResp["id"] == nil {
 		fatal("create course", fmt.Errorf("API returned: %v", courseResp))
 	}
@@ -492,6 +505,8 @@ func componentsToMarkdown(components []any) string {
 			width, _ := cm["width"].(float64)
 			if imgURL == "" && imgPath != "" {
 				imgURL = "https://www.educative.io" + imgPath
+			} else if imgURL != "" && strings.HasPrefix(imgURL, "/") {
+				imgURL = "https://www.educative.io" + imgURL
 			}
 			if caption == "" {
 				caption = "image"

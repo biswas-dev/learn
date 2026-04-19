@@ -3,9 +3,9 @@ import { Sidebar } from "~/components/layout/Sidebar";
 
 export default component$(() => {
   return (
-    <div class="flex">
+    <div class="grid grid-cols-1 lg:grid-cols-[232px_1fr] min-h-[calc(100vh-57px)]">
       <Sidebar />
-      <div class="flex-1 min-w-0">
+      <div class="min-w-0">
         <Slot />
       </div>
     </div>

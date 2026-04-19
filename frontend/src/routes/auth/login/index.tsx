@@ -10,75 +10,78 @@ export default component$(() => {
   const nav = useNavigate();
 
   return (
-    <main class="max-w-md mx-auto px-4 py-20">
-      <h1 class="text-2xl font-bold text-text mb-6">Log In</h1>
+    <main class="flex min-h-[calc(100vh-57px)] items-center justify-center px-4">
+      <div class="w-full max-w-sm">
+        <div class="ln-panel">
+          <div class="ln-panel-head">
+            <h3>Sign in</h3>
+          </div>
+          <div class="ln-panel-body">
+            {error.value && (
+              <div class="mb-4 p-3 rounded-lg text-[13px] text-failure bg-[color-mix(in_oklch,var(--color-failure)_10%,transparent)] border border-[color-mix(in_oklch,var(--color-failure)_25%,transparent)]">
+                {error.value}
+              </div>
+            )}
 
-      {error.value && (
-        <div class="mb-4 p-3 bg-failure/10 border border-failure/20 rounded-md text-sm text-failure">
-          {error.value}
+            <form
+              preventdefault:submit
+              onSubmit$={async () => {
+                error.value = "";
+                loading.value = true;
+                try {
+                  const resp = await post<{ token: string }>("/auth/login", {
+                    email: email.value,
+                    password: password.value,
+                  });
+                  setToken(resp.token);
+                  nav("/dashboard");
+                } catch (err: any) {
+                  error.value = err.message || "Login failed";
+                } finally {
+                  loading.value = false;
+                }
+              }}
+            >
+              <div class="mb-4">
+                <label class="ln-label">Email</label>
+                <input
+                  type="email"
+                  class="ln-input"
+                  value={email.value}
+                  onInput$={(_, el) => { email.value = el.value; }}
+                  required
+                />
+              </div>
+
+              <div class="mb-6">
+                <label class="ln-label">Password</label>
+                <input
+                  type="password"
+                  class="ln-input"
+                  value={password.value}
+                  onInput$={(_, el) => { password.value = el.value; }}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                class="ln-btn ln-btn-primary w-full justify-center"
+                disabled={loading.value}
+              >
+                {loading.value ? "Signing in..." : "Sign in"}
+              </button>
+            </form>
+
+            <p class="mt-4 text-[13px] text-subtle text-center">
+              Don't have an account?{" "}
+              <Link href="/auth/signup" class="text-accent hover:text-accent-hover">
+                Create one
+              </Link>
+            </p>
+          </div>
         </div>
-      )}
-
-      <form
-        preventdefault:submit
-        onSubmit$={async () => {
-          error.value = "";
-          loading.value = true;
-          try {
-            const resp = await post<{ token: string }>("/auth/login", {
-              email: email.value,
-              password: password.value,
-            });
-            setToken(resp.token);
-            nav("/dashboard");
-          } catch (err: any) {
-            error.value = err.message || "Login failed";
-          } finally {
-            loading.value = false;
-          }
-        }}
-      >
-        <label class="block mb-4">
-          <span class="text-sm text-muted">Email</span>
-          <input
-            type="email"
-            class="mt-1 block w-full bg-surface border border-border rounded-md px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
-            value={email.value}
-            onInput$={(_, el) => {
-              email.value = el.value;
-            }}
-            required
-          />
-        </label>
-
-        <label class="block mb-6">
-          <span class="text-sm text-muted">Password</span>
-          <input
-            type="password"
-            class="mt-1 block w-full bg-surface border border-border rounded-md px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
-            value={password.value}
-            onInput$={(_, el) => {
-              password.value = el.value;
-            }}
-            required
-          />
-        </label>
-
-        <button
-          type="submit"
-          class="w-full bg-accent text-white py-2 rounded-md text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
-          disabled={loading.value}
-        >
-          {loading.value ? "Logging in..." : "Log In"}
-        </button>
-      </form>
-
-      <p class="mt-4 text-sm text-muted text-center">
-        Don't have an account?{" "}
-        <Link href="/auth/signup" class="text-accent hover:text-accent-hover">
-          Sign up
-        </Link>
-      </p>
+      </div>
     </main>
   );
 });

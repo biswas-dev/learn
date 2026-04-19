@@ -117,6 +117,14 @@ var migrations = []string{
 	)`,
 	"CREATE INDEX IF NOT EXISTS idx_course_views_user ON course_views(user_id, viewed_at DESC)",
 
+	// User tag access — grants access to protected courses with matching tags
+	`CREATE TABLE IF NOT EXISTS user_tag_access (
+		user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+		PRIMARY KEY (user_id, tag_id)
+	)`,
+	"CREATE INDEX IF NOT EXISTS idx_user_tag_access_user ON user_tag_access(user_id)",
+
 	// FTS5 for course search
 	`CREATE VIRTUAL TABLE IF NOT EXISTS courses_fts USING fts5(
 		title, description, tags,

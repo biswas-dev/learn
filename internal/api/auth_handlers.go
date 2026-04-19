@@ -52,7 +52,7 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		Email:        req.Email,
 		PasswordHash: hash,
 		DisplayName:  req.DisplayName,
-		Role:         models.RoleViewer,
+		Role:         models.RoleCommenter,
 	}
 	if err := h.store.CreateUser(r.Context(), user); err != nil {
 		jsonError(w, "failed to create user", http.StatusInternalServerError)
@@ -65,6 +65,7 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	accessTags, _ := h.store.GetUserAccessTags(r.Context(), user.ID)
 	jsonResp(w, http.StatusCreated, map[string]any{
 		"token": token,
 		"user": map[string]any{
@@ -72,6 +73,7 @@ func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 			"email":        user.Email,
 			"display_name": user.DisplayName,
 			"role":         user.Role,
+			"access_tags":  accessTags,
 		},
 	})
 }
@@ -103,6 +105,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	accessTags, _ := h.store.GetUserAccessTags(r.Context(), user.ID)
 	jsonResp(w, http.StatusOK, map[string]any{
 		"token": token,
 		"user": map[string]any{
@@ -110,6 +113,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			"email":        user.Email,
 			"display_name": user.DisplayName,
 			"role":         user.Role,
+			"access_tags":  accessTags,
 		},
 	})
 }
@@ -120,12 +124,14 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	accessTags, _ := h.store.GetUserAccessTags(r.Context(), user.ID)
 	jsonResp(w, http.StatusOK, map[string]any{
 		"id":           user.ID,
 		"email":        user.Email,
 		"display_name": user.DisplayName,
 		"role":         user.Role,
 		"created_at":   user.CreatedAt,
+		"access_tags":  accessTags,
 	})
 }
 

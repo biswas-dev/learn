@@ -93,7 +93,7 @@ func main() {
 	defer db.Close()
 
 	ctx := context.Background()
-	localCourses, err := db.ListCourses(ctx, true, true)
+	localCourses, err := db.ListCourses(ctx, true, 0, true)
 	if err != nil {
 		log.Fatal().Err(err).Msg("list local courses")
 	}

@@ -99,6 +99,50 @@ func (s *SQLiteStore) UpdateUserRole(ctx context.Context, id int64, role models.
 	return err
 }
 
+func (s *SQLiteStore) GetUserAccessTags(ctx context.Context, userID int64) ([]models.Tag, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.id, t.name, t.slug, t.category FROM user_tag_access uta
+		 JOIN tags t ON uta.tag_id = t.id WHERE uta.user_id = ? ORDER BY t.name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tags []models.Tag
+	for rows.Next() {
+		t := models.Tag{}
+		if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.Category); err != nil {
+			return nil, err
+		}
+		tags = append(tags, t)
+	}
+	return tags, nil
+}
+
+func (s *SQLiteStore) GrantTagAccess(ctx context.Context, userID, tagID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO user_tag_access (user_id, tag_id) VALUES (?, ?)`, userID, tagID)
+	return err
+}
+
+func (s *SQLiteStore) RevokeTagAccess(ctx context.Context, userID, tagID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM user_tag_access WHERE user_id = ? AND tag_id = ?`, userID, tagID)
+	return err
+}
+
+func (s *SQLiteStore) SetUserTagAccess(ctx context.Context, userID int64, tagIDs []int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	tx.ExecContext(ctx, `DELETE FROM user_tag_access WHERE user_id = ?`, userID)
+	for _, tagID := range tagIDs {
+		tx.ExecContext(ctx, `INSERT INTO user_tag_access (user_id, tag_id) VALUES (?, ?)`, userID, tagID)
+	}
+	return tx.Commit()
+}
+
 func (s *SQLiteStore) scanUser(row *sql.Row) (*models.User, error) {
 	u := &models.User{}
 	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName, &u.Role, &u.CreatedAt, &u.UpdatedAt)
@@ -146,20 +190,29 @@ func (s *SQLiteStore) DeleteCourse(ctx context.Context, id int64) error {
 	return err
 }
 
-func (s *SQLiteStore) ListCourses(ctx context.Context, includeUnpublished, includeProtected bool) ([]models.Course, error) {
+func (s *SQLiteStore) ListCourses(ctx context.Context, includeUnpublished bool, userID int64, isAdmin bool) ([]models.Course, error) {
 	query := `SELECT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published, c.created_by, c.sort_order, c.created_at, c.updated_at, COALESCE(u.display_name, ''),
 		 (SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id),
 		 (SELECT COUNT(*) FROM pages p JOIN sections s ON p.section_id = s.id WHERE s.course_id = c.id)
 		 FROM courses c LEFT JOIN users u ON c.created_by = u.id WHERE 1=1`
+	var args []any
 	if !includeUnpublished {
 		query += ` AND c.is_published = 1`
 	}
-	if !includeProtected {
-		query += ` AND c.is_protected = 0`
+	if !isAdmin {
+		// Protected courses only visible if user has matching tag access
+		if userID > 0 {
+			query += ` AND (c.is_protected = 0 OR EXISTS (
+				SELECT 1 FROM course_tags ct JOIN user_tag_access uta ON uta.tag_id = ct.tag_id
+				WHERE ct.course_id = c.id AND uta.user_id = ?))`
+			args = append(args, userID)
+		} else {
+			query += ` AND c.is_protected = 0`
+		}
 	}
 	query += ` ORDER BY c.sort_order, c.created_at DESC`
 
-	rows, err := s.db.QueryContext(ctx, query)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -613,10 +666,22 @@ func (s *SQLiteStore) ListTagsWithCounts(ctx context.Context) ([]models.Tag, err
 
 // --- Search ---
 
-func (s *SQLiteStore) SearchCourses(ctx context.Context, query string, limit int) ([]models.CourseSummary, error) {
+func (s *SQLiteStore) SearchCourses(ctx context.Context, query string, limit int, userID int64, isAdmin bool) ([]models.CourseSummary, error) {
 	if limit <= 0 {
 		limit = 20
 	}
+	protectedFilter := ` AND c.is_protected = 0`
+	var args []any
+	args = append(args, query)
+	if isAdmin {
+		protectedFilter = ""
+	} else if userID > 0 {
+		protectedFilter = ` AND (c.is_protected = 0 OR EXISTS (
+			SELECT 1 FROM course_tags ct JOIN user_tag_access uta ON uta.tag_id = ct.tag_id
+			WHERE ct.course_id = c.id AND uta.user_id = ?))`
+		args = append(args, userID)
+	}
+	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published,
 			c.created_by, c.sort_order, c.created_at, c.updated_at, COALESCE(u.display_name, ''),
@@ -625,9 +690,9 @@ func (s *SQLiteStore) SearchCourses(ctx context.Context, query string, limit int
 		 FROM courses_fts fts
 		 JOIN courses c ON fts.rowid = c.id
 		 LEFT JOIN users u ON c.created_by = u.id
-		 WHERE courses_fts MATCH ? AND c.is_published = 1
+		 WHERE courses_fts MATCH ? AND c.is_published = 1` + protectedFilter + `
 		 ORDER BY rank
-		 LIMIT ?`, query, limit)
+		 LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -739,13 +804,26 @@ func (s *SQLiteStore) GetCoursesInProgress(ctx context.Context, userID int64, li
 
 // --- Dashboard ---
 
-func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64) (*models.DashboardResponse, error) {
+func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64, isAdmin bool) (*models.DashboardResponse, error) {
 	resp := &models.DashboardResponse{
 		Categories: make(map[string][]models.CourseSummary),
 	}
 
-	// Total published courses
-	s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM courses WHERE is_published = 1`).Scan(&resp.TotalCourses)
+	// Build protected course filter
+	protectedFilter := ` AND c.is_protected = 0`
+	var protectedArgs []any
+	if isAdmin {
+		protectedFilter = ""
+	} else if userID > 0 {
+		protectedFilter = ` AND (c.is_protected = 0 OR EXISTS (
+			SELECT 1 FROM course_tags ct JOIN user_tag_access uta ON uta.tag_id = ct.tag_id
+			WHERE ct.course_id = c.id AND uta.user_id = ?))`
+		protectedArgs = append(protectedArgs, userID)
+	}
+
+	// Total visible published courses
+	countQuery := `SELECT COUNT(*) FROM courses c WHERE c.is_published = 1` + protectedFilter
+	s.db.QueryRowContext(ctx, countQuery, protectedArgs...).Scan(&resp.TotalCourses)
 
 	// Get progress map first (single query, fully consumed)
 	progressMap, _ := s.GetAllCourseProgress(ctx, userID)
@@ -767,8 +845,7 @@ func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64) (*models.D
 	}
 
 	// Recently viewed (fully consumed into slice before next query)
-	recentRows, err := s.db.QueryContext(ctx,
-		`SELECT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published,
+	recentQuery := `SELECT c.id, c.title, c.slug, c.description, c.cover_image_url, c.is_protected, c.is_published,
 			c.created_by, c.sort_order, c.created_at, c.updated_at, COALESCE(u.display_name, ''),
 			(SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id),
 			(SELECT COUNT(*) FROM pages p JOIN sections s ON p.section_id = s.id WHERE s.course_id = c.id),
@@ -776,9 +853,12 @@ func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64) (*models.D
 		 FROM course_views cv
 		 JOIN courses c ON cv.course_id = c.id
 		 LEFT JOIN users u ON c.created_by = u.id
-		 WHERE cv.user_id = ? AND c.is_published = 1
+		 WHERE cv.user_id = ? AND c.is_published = 1` + protectedFilter + `
 		 ORDER BY cv.viewed_at DESC
-		 LIMIT 6`, userID)
+		 LIMIT 6`
+	recentArgs := []any{userID}
+	recentArgs = append(recentArgs, protectedArgs...)
+	recentRows, err := s.db.QueryContext(ctx, recentQuery, recentArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("recently viewed: %w", err)
 	}
@@ -813,8 +893,7 @@ func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64) (*models.D
 	}
 
 	// Categories: get all published courses grouped by category (fully consumed into slice)
-	catRows, err := s.db.QueryContext(ctx,
-		`SELECT t.category, c.id, c.title, c.slug, c.description, c.cover_image_url,
+	catQuery := `SELECT t.category, c.id, c.title, c.slug, c.description, c.cover_image_url,
 			c.is_protected, c.is_published, c.created_by, c.sort_order, c.created_at, c.updated_at,
 			COALESCE(u.display_name, ''),
 			(SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id),
@@ -823,8 +902,9 @@ func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64) (*models.D
 		 JOIN tags t ON ct.tag_id = t.id
 		 JOIN courses c ON ct.course_id = c.id
 		 LEFT JOIN users u ON c.created_by = u.id
-		 WHERE c.is_published = 1
-		 ORDER BY t.category, c.title`)
+		 WHERE c.is_published = 1` + protectedFilter + `
+		 ORDER BY t.category, c.title`
+	catRows, err := s.db.QueryContext(ctx, catQuery, protectedArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("categories: %w", err)
 	}
@@ -865,7 +945,7 @@ func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64) (*models.D
 
 // --- Paginated Listing ---
 
-func (s *SQLiteStore) ListCoursesPaginated(ctx context.Context, page, size int, category, tag string, includeProtected bool) (*models.PaginatedCourses, error) {
+func (s *SQLiteStore) ListCoursesPaginated(ctx context.Context, page, size int, category, tag string, userID int64, isAdmin bool) (*models.PaginatedCourses, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -875,10 +955,17 @@ func (s *SQLiteStore) ListCoursesPaginated(ctx context.Context, page, size int, 
 	offset := (page - 1) * size
 
 	baseWhere := `c.is_published = 1`
-	if !includeProtected {
-		baseWhere += ` AND c.is_protected = 0`
-	}
 	var args []any
+	if !isAdmin {
+		if userID > 0 {
+			baseWhere += ` AND (c.is_protected = 0 OR EXISTS (
+				SELECT 1 FROM course_tags ct2 JOIN user_tag_access uta ON uta.tag_id = ct2.tag_id
+				WHERE ct2.course_id = c.id AND uta.user_id = ?))`
+			args = append(args, userID)
+		} else {
+			baseWhere += ` AND c.is_protected = 0`
+		}
+	}
 
 	joinClause := ""
 	if category != "" {

@@ -225,9 +225,27 @@ func (h *PageHandler) GetPageContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := UserFromCtx(r.Context())
-	if course.IsProtected && (user == nil || user.Role.Level() < models.RoleEditor.Level()) {
-		jsonError(w, "access denied", http.StatusForbidden)
-		return
+	if course.IsProtected {
+		hasAccess := user != nil && user.Role == models.RoleAdmin
+		if !hasAccess && user != nil {
+			tags, _ := h.store.GetUserAccessTags(r.Context(), user.ID)
+			courseTags, _ := h.store.ListCourseTags(r.Context(), course.ID)
+			for _, ut := range tags {
+				for _, ct := range courseTags {
+					if ut.ID == ct.ID {
+						hasAccess = true
+						break
+					}
+				}
+				if hasAccess {
+					break
+				}
+			}
+		}
+		if !hasAccess {
+			jsonError(w, "access denied", http.StatusForbidden)
+			return
+		}
 	}
 	if !course.IsPublished && (user == nil || user.Role.Level() < models.RoleEditor.Level()) {
 		jsonError(w, "course not found", http.StatusNotFound)
