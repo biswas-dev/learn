@@ -143,7 +143,7 @@ func (h *ImportHandler) ImportCourse(w http.ResponseWriter, r *http.Request) {
 func (h *ImportHandler) BulkImport(w http.ResponseWriter, r *http.Request) {
 	user := UserFromCtx(r.Context())
 
-	if err := r.ParseMultipartForm(500 << 20); err != nil { // 500MB max
+	if err := r.ParseMultipartForm(4 << 30); err != nil { // 4GB max
 		jsonError(w, "file too large", http.StatusBadRequest)
 		return
 	}
