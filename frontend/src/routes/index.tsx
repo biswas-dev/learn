@@ -11,16 +11,6 @@ function tintFor(title: string): string {
   return colors[h % colors.length];
 }
 
-const BookCoverLg = component$<{ color: string; title: string }>(({ color, title }) => (
-  <div class="ln-cover ln-cover-lg" style={{ background: color }}>
-    <div class="ln-cover-texture" />
-    <div class="ln-cover-text">
-      <div class="learn-label">Learn</div>
-      <div style={{ textWrap: "pretty" }}>{title}</div>
-    </div>
-  </div>
-));
-
 export default component$(() => {
   const courses = useSignal<Course[]>([]);
   const loading = useSignal(true);
@@ -78,65 +68,201 @@ export default component$(() => {
           )}
         </div>
 
-        {/* Hero art */}
+        {/* Hero art — animated SVG scene */}
         <div style={{ position: "relative", height: "520px" }}>
-          <div style={{
-            position: "absolute", inset: 0,
-            background: "var(--color-paper-2)", borderRadius: "3px",
-            overflow: "hidden", border: "1px solid var(--color-rule)",
-          }}>
-            {/* faint grid */}
-            <div style={{
-              position: "absolute", inset: 0,
-              backgroundImage: "linear-gradient(var(--color-rule-soft) 1px, transparent 1px), linear-gradient(90deg, var(--color-rule-soft) 1px, transparent 1px)",
-              backgroundSize: "32px 32px", opacity: 0.5,
-            }}/>
+          <svg class="hero-svg" viewBox="0 0 520 520" width="100%" height="100%" style={{ borderRadius: "3px", overflow: "hidden" }}>
+            <defs>
+              {/* Grid pattern */}
+              <pattern id="hero-grid" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+                <path d="M32 0V32H0" fill="none" stroke="var(--color-rule-soft)" stroke-width="0.5" opacity="0.5"/>
+              </pattern>
+              {/* Book spine shadow */}
+              <linearGradient id="spine-shadow" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#000" stop-opacity="0.12"/>
+                <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+              </linearGradient>
+              {/* Page texture */}
+              <pattern id="page-lines" x="0" y="0" width="4" height="3" patternUnits="userSpaceOnUse">
+                <rect width="4" height="1" fill="#000" opacity="0.04"/>
+              </pattern>
+            </defs>
 
-            {/* book composition */}
-            <div style={{
-              position: "absolute", left: "50%", top: "50%",
-              transform: "translate(-50%, -50%)",
-              display: "flex", gap: "3px",
-            }}>
-              <BookCoverLg color="#C88A4A" title="A Programmer's Guide to AWS S3" />
-              <div style={{ width: "4px", background: "var(--color-ink-4)", opacity: 0.2 }} />
-              <BookCoverLg color="#7A8B6A" title="A Hands-on Guide to Angular" />
-            </div>
+            {/* Background */}
+            <rect width="520" height="520" fill="var(--color-paper-2)" rx="3"/>
+            <rect width="520" height="520" fill="url(#hero-grid)"/>
 
-            {/* floating annotations */}
-            <div style={{
-              position: "absolute", top: "24px", left: "24px",
-              padding: "10px 14px", background: "var(--color-paper)",
-              border: "1px solid var(--color-rule)", borderRadius: "3px",
-              fontSize: "11.5px", maxWidth: "200px",
-            }}>
-              <div class="mono" style={{ fontSize: "9.5px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-ink-3)", marginBottom: "4px" }}>Now reading</div>
-              <div class="serif" style={{ fontSize: "15px", lineHeight: 1.2 }}>Chapter 11 — Security, Access Control & Bucket Policies</div>
-              <div style={{ marginTop: "8px" }}>
-                <div class="ln-track"><div style={{ width: "32%" }} /></div>
-              </div>
-            </div>
+            {/* === BOOK COVERS (center) === */}
+            <g transform="translate(155, 120)">
+              {/* Left book */}
+              <g style={{ animation: "hero-float-1 6s ease-in-out infinite" }}>
+                <rect width="100" height="140" rx="2" fill="#C88A4A"/>
+                <rect width="100" height="140" rx="2" fill="url(#page-lines)" opacity="0.6"/>
+                <rect width="5" height="140" fill="url(#spine-shadow)"/>
+                <text x="12" y="18" fill="rgba(255,255,255,0.7)" font-size="5.5" letter-spacing="0.12em" class="mono-text">LEARN</text>
+                <text x="12" y="115" fill="rgba(255,255,255,0.92)" font-size="11" class="serif-text" style={{ lineHeight: 1.15 }}>
+                  <tspan x="12">Programmer's</tspan>
+                  <tspan x="12" dy="14">Guide to</tspan>
+                  <tspan x="12" dy="14">AWS S3</tspan>
+                </text>
+              </g>
 
-            <div style={{
-              position: "absolute", bottom: "24px", right: "24px",
-              padding: "10px 14px", background: "var(--color-paper)",
-              border: "1px solid var(--color-rule)", borderRadius: "3px",
-              fontSize: "11.5px", display: "flex", alignItems: "center", gap: "10px",
-            }}>
-              <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "var(--color-accent)", color: "var(--color-paper)", display: "grid", placeItems: "center", fontSize: "11px", fontWeight: 500 }}>A</div>
-              <div>
-                <div style={{ fontWeight: 500 }}>12-day streak</div>
-                <div class="mono" style={{ fontSize: "10px", color: "var(--color-ink-3)" }}>18 min to finish today</div>
-              </div>
-            </div>
+              {/* Spine divider */}
+              <rect x="103" y="0" width="3" height="140" fill="var(--color-ink-4)" opacity="0.15" style={{ animation: "hero-float-1 6s ease-in-out infinite" }}/>
 
-            <div style={{
-              position: "absolute", top: "40%", right: "32px",
-              padding: "8px 12px", background: "var(--color-ink)", color: "var(--color-paper)",
-              borderRadius: "2px", fontSize: "11px", fontFamily: "var(--font-mono)",
-              letterSpacing: "0.04em",
-            }}>next chapter →</div>
-          </div>
+              {/* Right book */}
+              <g transform="translate(109, 0)" style={{ animation: "hero-float-2 7s ease-in-out infinite" }}>
+                <rect width="100" height="140" rx="2" fill="#5E6E58"/>
+                <rect width="100" height="140" rx="2" fill="url(#page-lines)" opacity="0.6"/>
+                <rect width="5" height="140" fill="url(#spine-shadow)"/>
+                <text x="12" y="18" fill="rgba(255,255,255,0.7)" font-size="5.5" letter-spacing="0.12em" class="mono-text">LEARN</text>
+                <text x="12" y="105" fill="rgba(255,255,255,0.92)" font-size="11" class="serif-text">
+                  <tspan x="12">Hands-on</tspan>
+                  <tspan x="12" dy="14">Guide to</tspan>
+                  <tspan x="12" dy="14">Angular</tspan>
+                </text>
+              </g>
+            </g>
+
+            {/* === NOW READING card (top-left, floating) === */}
+            <g style={{ animation: "hero-float-3 5s ease-in-out infinite" }}>
+              <rect x="20" y="20" width="195" height="95" rx="3" fill="var(--color-paper)" stroke="var(--color-rule)" stroke-width="1"/>
+              <text x="34" y="42" fill="var(--color-ink-3)" font-size="6" letter-spacing="0.14em" class="mono-text">NOW READING</text>
+              <text x="34" y="58" fill="var(--color-ink)" font-size="10.5" class="serif-text" font-weight="400">
+                <tspan x="34">Chapter 11 — Security,</tspan>
+                <tspan x="34" dy="14">Access Control &amp; Policies</tspan>
+              </text>
+              {/* Animated progress bar */}
+              <rect x="34" y="85" width="130" height="2" rx="1" fill="var(--color-rule)"/>
+              <rect x="34" y="85" width="130" height="2" rx="1" fill="var(--color-accent)">
+                <animate attributeName="width" from="20" to="90" dur="8s" repeatCount="indefinite" values="20;50;65;90;90;20" keyTimes="0;0.3;0.5;0.8;0.95;1" dur="12s"/>
+              </rect>
+              {/* Page counter */}
+              <text x="172" y="89" fill="var(--color-ink-3)" font-size="6" class="mono-text" text-anchor="end">
+                <animate attributeName="textContent" values="32%;48%;65%;82%;82%;32%" keyTimes="0;0.3;0.5;0.8;0.95;1" dur="12s" repeatCount="indefinite"/>
+              </text>
+            </g>
+
+            {/* === CONTENT PREVIEW (right side, scrolling text) === */}
+            <g transform="translate(310, 140)" style={{ animation: "hero-float-2 8s ease-in-out infinite" }}>
+              <rect x="0" y="0" width="185" height="200" rx="3" fill="var(--color-paper)" stroke="var(--color-rule)" stroke-width="1"/>
+              <clipPath id="content-clip"><rect x="2" y="2" width="181" height="196" rx="2"/></clipPath>
+              <g clip-path="url(#content-clip)">
+                <g>
+                  <animateTransform attributeName="transform" type="translate" values="0,0;0,-50;0,-50;0,0" keyTimes="0;0.4;0.8;1" dur="10s" repeatCount="indefinite"/>
+                  {/* Simulated text lines */}
+                  <text x="14" y="22" fill="var(--color-ink)" font-size="8.5" font-weight="600">Security Fundamentals</text>
+                  <rect x="14" y="30" width="155" height="1" rx="0.5" fill="var(--color-rule-soft)"/>
+                  {/* Paragraph lines */}
+                  <rect x="14" y="40" width="158" height="2" rx="1" fill="var(--color-ink-4)" opacity="0.5"/>
+                  <rect x="14" y="46" width="140" height="2" rx="1" fill="var(--color-ink-4)" opacity="0.5"/>
+                  <rect x="14" y="52" width="152" height="2" rx="1" fill="var(--color-ink-4)" opacity="0.5"/>
+                  <rect x="14" y="58" width="98" height="2" rx="1" fill="var(--color-ink-4)" opacity="0.5"/>
+                  {/* Code block */}
+                  <rect x="14" y="68" width="158" height="40" rx="2" fill="var(--color-paper-2)" stroke="var(--color-rule)" stroke-width="0.5"/>
+                  <text x="20" y="80" fill="#C88A4A" font-size="6" class="mono-text">const</text>
+                  <text x="42" y="80" fill="var(--color-ink-2)" font-size="6" class="mono-text">policy = {'{'}</text>
+                  <text x="26" y="89" fill="var(--color-ink-3)" font-size="6" class="mono-text">Effect: "Allow",</text>
+                  <text x="26" y="98" fill="var(--color-ink-3)" font-size="6" class="mono-text">Action: "s3:Get*"</text>
+                  <text x="20" y="107" fill="var(--color-ink-2)" font-size="6" class="mono-text">{'}'}</text>
+                  {/* More paragraph */}
+                  <rect x="14" y="118" width="158" height="2" rx="1" fill="var(--color-ink-4)" opacity="0.5"/>
+                  <rect x="14" y="124" width="130" height="2" rx="1" fill="var(--color-ink-4)" opacity="0.5"/>
+                  <rect x="14" y="130" width="145" height="2" rx="1" fill="var(--color-ink-4)" opacity="0.5"/>
+                  {/* Image placeholder */}
+                  <rect x="14" y="140" width="158" height="60" rx="2" fill="var(--color-paper-3)" stroke="var(--color-rule)" stroke-width="0.5"/>
+                  <text x="93" y="174" fill="var(--color-ink-4)" font-size="7" text-anchor="middle" class="mono-text">diagram</text>
+                  {/* More lines below fold */}
+                  <rect x="14" y="210" width="158" height="2" rx="1" fill="var(--color-ink-4)" opacity="0.5"/>
+                  <rect x="14" y="216" width="120" height="2" rx="1" fill="var(--color-ink-4)" opacity="0.5"/>
+                </g>
+              </g>
+              {/* Scroll indicator */}
+              <rect x="180" y="10" width="2" height="30" rx="1" fill="var(--color-rule)"/>
+              <rect x="180" y="10" width="2" height="12" rx="1" fill="var(--color-ink-4)">
+                <animate attributeName="y" values="10;28;28;10" keyTimes="0;0.4;0.8;1" dur="10s" repeatCount="indefinite"/>
+              </rect>
+            </g>
+
+            {/* === STREAK CARD (bottom-right, floating) === */}
+            <g transform="translate(340, 400)" style={{ animation: "hero-float-1 7s ease-in-out 1s infinite" }}>
+              <rect width="155" height="52" rx="3" fill="var(--color-paper)" stroke="var(--color-rule)" stroke-width="1"/>
+              <circle cx="28" cy="26" r="14" fill="var(--color-accent)"/>
+              <text x="28" y="30" fill="var(--color-paper)" font-size="10" text-anchor="middle" font-weight="500">A</text>
+              <text x="50" y="22" fill="var(--color-ink)" font-size="8.5" font-weight="500">12-day streak</text>
+              <text x="50" y="34" fill="var(--color-ink-3)" font-size="6" class="mono-text">18 min to finish today</text>
+              {/* Mini week dots */}
+              {["M","T","W","T","F","S","S"].map((d, i) => (
+                <g key={i} transform={`translate(${50 + i * 13}, 40)`}>
+                  <rect width="9" height="9" rx="1.5" fill={i < 5 ? "var(--color-accent)" : "var(--color-paper-2)"} stroke="var(--color-rule)" stroke-width="0.5"/>
+                </g>
+              ))}
+            </g>
+
+            {/* === NEXT CHAPTER pill (animated slide-in) === */}
+            <g transform="translate(310, 365)">
+              <g style={{ animation: "hero-slide-up 6s ease-in-out infinite" }}>
+                <rect width="110" height="28" rx="2" fill="var(--color-ink)"/>
+                <text x="14" y="18" fill="var(--color-paper)" font-size="7" class="mono-text" letter-spacing="0.04em">next chapter →</text>
+              </g>
+            </g>
+
+            {/* === TOC sidebar peek (left edge) === */}
+            <g transform="translate(20, 150)" style={{ animation: "hero-float-2 9s ease-in-out infinite" }}>
+              <rect width="120" height="220" rx="3" fill="var(--color-paper)" stroke="var(--color-rule)" stroke-width="1"/>
+              <text x="12" y="18" fill="var(--color-ink-3)" font-size="5.5" letter-spacing="0.12em" class="mono-text">TABLE OF CONTENTS</text>
+              <rect x="12" y="24" width="96" height="0.5" fill="var(--color-rule)"/>
+
+              {/* Chapter items */}
+              {[
+                { n: "01", t: "Introduction", done: true },
+                { n: "02", t: "Fundamentals", done: true },
+                { n: "03", t: "Storage classes", done: true },
+                { n: "04", t: "Uploading", done: true },
+                { n: "05", t: "Versioning", done: true },
+                { n: "06", t: "Notifications", done: true },
+                { n: "07", t: "Web hosting", done: true },
+                { n: "08", t: "Performance", done: true },
+                { n: "09", t: "Costs", done: true },
+                { n: "10", t: "Replication", done: true },
+                { n: "11", t: "Security", done: false, current: true },
+              ].map((ch, i) => (
+                <g key={i} transform={`translate(0, ${32 + i * 17})`}>
+                  {/* Current chapter highlight */}
+                  {ch.current && (
+                    <rect x="2" y="-3" width="116" height="15" rx="2" fill="var(--color-paper-2)">
+                      <animate attributeName="opacity" values="0.5;1;0.5" dur="3s" repeatCount="indefinite"/>
+                    </rect>
+                  )}
+                  {ch.current && <rect x="2" y="-3" width="2" height="15" fill="var(--color-accent)"/>}
+                  {/* Check or number */}
+                  {ch.done ? (
+                    <g transform="translate(10, 0)">
+                      <circle cx="4" cy="4" r="4" fill="none" stroke="var(--color-accent)" stroke-width="0.8" opacity="0.5"/>
+                      <path d="M1.5 4 L3.5 6 L7 1.5" fill="none" stroke="var(--color-accent)" stroke-width="0.8" opacity="0.5"/>
+                    </g>
+                  ) : (
+                    <text x="12" y="7" fill="var(--color-accent-ink)" font-size="5.5" class="mono-text" font-weight="500">{ch.n}</text>
+                  )}
+                  <text x="24" y="7" fill={ch.current ? "var(--color-ink)" : "var(--color-ink-3)"} font-size="6.5" font-weight={ch.current ? "500" : "400"}>
+                    {ch.t}
+                  </text>
+                </g>
+              ))}
+            </g>
+
+            {/* === Completion animation (floating checkmark) === */}
+            <g transform="translate(145, 310)" style={{ animation: "hero-fade-loop 12s ease-in-out infinite" }}>
+              <rect width="170" height="30" rx="15" fill="var(--color-paper)" stroke="var(--color-accent)" stroke-width="1"/>
+              <circle cx="20" cy="15" r="8" fill="var(--color-accent)" opacity="0.15"/>
+              <path d="M16 15 L19 18 L25 12" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <text x="36" y="18" fill="var(--color-ink-2)" font-size="7" font-weight="500">Chapter 10 complete</text>
+            </g>
+
+            {/* === Reading cursor blink === */}
+            <g transform="translate(324, 172)">
+              <rect width="1.5" height="10" fill="var(--color-accent)" rx="0.5" style={{ animation: "hero-cursor 1.2s step-end infinite" }}/>
+            </g>
+          </svg>
         </div>
       </section>
 
