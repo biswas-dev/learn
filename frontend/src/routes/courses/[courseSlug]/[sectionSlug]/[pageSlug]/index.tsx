@@ -26,6 +26,7 @@ export default component$(() => {
   const commentText = useSignal("");
   const commentLoading = useSignal(false);
   const showToc = useSignal(false);
+  const pinToc = useSignal(false);
   const lightboxSrc = useSignal("");
   const lightboxAlt = useSignal("");
   const resolvedCourseSlug = useSignal(loc.params.courseSlug);
@@ -49,6 +50,13 @@ export default component$(() => {
     resolvedSectionSlug.value = ss;
     resolvedPageSlug.value = ps;
     loading.value = true;
+
+    // Restore pinned state from localStorage
+    const savedPin = localStorage.getItem("learn_toc_pinned");
+    if (savedPin === "true") {
+      pinToc.value = true;
+      showToc.value = true;
+    }
 
     Promise.all([
       get<Course>(`/courses/${cs}`),
@@ -115,14 +123,16 @@ export default component$(() => {
     };
   })();
 
+  const tocVisible = showToc.value || pinToc.value;
+
   if (loading.value) {
     return (
-      <main class="max-w-7xl mx-auto px-7 py-10">
+      <main style={{ maxWidth: "900px", margin: "0 auto", padding: "40px 32px" }}>
         <div class="animate-pulse">
-          <div class="h-6 bg-border-soft rounded w-48 mb-4" />
-          <div class="h-4 bg-border-soft rounded w-full mb-2" />
-          <div class="h-4 bg-border-soft rounded w-3/4 mb-2" />
-          <div class="h-4 bg-border-soft rounded w-5/6" />
+          <div style={{ height: "24px", background: "var(--color-rule-soft)", borderRadius: "3px", width: "192px", marginBottom: "16px" }} />
+          <div style={{ height: "16px", background: "var(--color-rule-soft)", borderRadius: "3px", width: "100%", marginBottom: "8px" }} />
+          <div style={{ height: "16px", background: "var(--color-rule-soft)", borderRadius: "3px", width: "75%", marginBottom: "8px" }} />
+          <div style={{ height: "16px", background: "var(--color-rule-soft)", borderRadius: "3px", width: "83%" }} />
         </div>
       </main>
     );
@@ -130,11 +140,11 @@ export default component$(() => {
 
   if (error.value || !page.value) {
     return (
-      <main class="max-w-7xl mx-auto px-7 py-10">
+      <main style={{ maxWidth: "900px", margin: "0 auto", padding: "40px 32px" }}>
         <div class="ln-panel">
           <div class="ln-panel-body">
-            <p class="text-failure text-[13px]">{error.value || "Page not found"}</p>
-            <Link href={`/courses/${resolvedCourseSlug.value}`} class="text-accent text-[13px] mt-2 inline-block">
+            <p style={{ color: "var(--color-failure)", fontSize: "13px" }}>{error.value || "Page not found"}</p>
+            <Link href={`/courses/${resolvedCourseSlug.value}`} style={{ color: "var(--color-accent-ink)", fontSize: "13px", marginTop: "8px", display: "inline-block" }}>
               Back to course
             </Link>
           </div>
@@ -144,60 +154,28 @@ export default component$(() => {
   }
 
   return (
-    <main class="max-w-7xl mx-auto px-7 py-10">
-      {/* Breadcrumb */}
-      <div class="ln-breadcrumb mb-6">
-        <Link href="/dashboard" class="hover:text-text transition-colors">learn</Link>
-        <span class="text-border-soft">/</span>
-        <Link href={`/courses/${resolvedCourseSlug.value}`} class="hover:text-text transition-colors">
-          {course.value?.title}
-        </Link>
-        <span class="text-border-soft">/</span>
-        <b class="truncate max-w-[300px] inline-block">{page.value.title}</b>
-      </div>
+    <>
+      <main style={{ maxWidth: "900px", margin: "0 auto", padding: "40px 32px 80px" }}>
+        {/* Breadcrumb */}
+        <div class="ln-breadcrumb" style={{ marginBottom: "24px" }}>
+          <Link href="/dashboard">learn</Link>
+          <span style={{ margin: "0 8px" }}>/</span>
+          <Link href={`/courses/${resolvedCourseSlug.value}`}>
+            {course.value?.title}
+          </Link>
+          <span style={{ margin: "0 8px" }}>/</span>
+          <b style={{ maxWidth: "300px", display: "inline-block" }} class="truncate">{page.value.title}</b>
+        </div>
 
-      <div class="lg:flex lg:gap-8">
-        {/* Sidebar TOC */}
-        <button
-          class="lg:hidden mb-4 ln-btn ln-btn-ghost text-[13px]"
-          onClick$={() => { showToc.value = !showToc.value; }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-          </svg>
-          Table of Contents
-        </button>
-
-        {course.value?.sections && (
-          <aside
-            class={[
-              "lg:w-64 lg:shrink-0 lg:block mb-6 lg:mb-0",
-              showToc.value ? "block" : "hidden",
-            ]}
-          >
-            <div class="sticky top-[75px]">
-              <div class="ln-panel">
-                <div class="ln-panel-body">
-                  <TableOfContents
-                    courseSlug={resolvedCourseSlug.value}
-                    sections={course.value.sections}
-                    currentPageSlug={resolvedPageSlug.value}
-                    completedPageIds={completedIds.value}
-                  />
-                </div>
-              </div>
-            </div>
-          </aside>
-        )}
-
-        {/* Page content */}
-        <article class="flex-1 min-w-0">
-          <div class="flex items-start justify-between gap-4 mb-6">
-            <h1 class="text-[24px] font-semibold tracking-[-0.02em]">{page.value.title}</h1>
+        {/* Page content — full width */}
+        <article>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px", marginBottom: "24px" }}>
+            <h1 style={{ fontSize: "28px", fontWeight: 600, letterSpacing: "-0.02em", margin: 0 }}>{page.value.title}</h1>
             {user.value && (user.value.role === "admin" || user.value.role === "editor") && course.value && page.value && (
               <Link
                 href={`/dashboard/courses/${course.value.id}/sections/${page.value.section_id}/pages/${page.value.id}`}
-                class="ln-btn ln-btn-ghost text-[12px] shrink-0"
+                class="ln-btn ln-btn-ghost"
+                style={{ fontSize: "12px", flexShrink: 0 }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Edit
@@ -214,24 +192,29 @@ export default component$(() => {
 
           {/* Comments */}
           {localStorage.getItem("learn_token") && (
-            <section class="mt-10 pt-6 border-t border-border-soft">
+            <section style={{ marginTop: "40px", paddingTop: "24px", borderTop: "1px solid var(--color-rule-soft)" }}>
               <div class="ln-panel">
                 <div class="ln-panel-head">
                   <h3>Comments <small>{comments.value.length}</small></h3>
                 </div>
                 <div class="ln-panel-body p0">
                   {comments.value.map((c) => (
-                    <div key={c.id} class="px-[18px] py-3 border-b border-dashed border-border-soft last:border-0">
-                      <div class="flex items-center gap-2 mb-1.5">
-                        <div class="w-6 h-6 rounded-[5px] bg-bg-2 border border-border-soft grid place-items-center font-mono text-[9px] text-muted font-medium">
-                          {c.author_name.charAt(0).toUpperCase()}
+                    <div key={c.id} style={{ padding: "12px 18px", borderBottom: "1px dashed var(--color-rule-soft)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                        <div style={{
+                          width: "24px", height: "24px", borderRadius: "3px",
+                          background: "var(--color-paper-2)", border: "1px solid var(--color-rule)",
+                          display: "grid", placeItems: "center",
+                          fontFamily: "var(--font-mono)", fontSize: "9px", fontWeight: 500,
+                        }}>
+                          {c.author_name?.charAt(0).toUpperCase() || "?"}
                         </div>
-                        <span class="text-[13px] font-medium">{c.author_name}</span>
-                        <span class="text-[11px] text-subtle font-mono">
+                        <span style={{ fontSize: "13px", fontWeight: 500 }}>{c.author_name}</span>
+                        <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)" }}>
                           {new Date(c.created_at).toLocaleDateString()}
                         </span>
                       </div>
-                      <p class="text-[13px] text-muted">{c.content}</p>
+                      <p style={{ fontSize: "13px", color: "var(--color-ink-2)", margin: 0 }}>{c.content}</p>
                     </div>
                   ))}
                 </div>
@@ -239,7 +222,7 @@ export default component$(() => {
 
               <form
                 preventdefault:submit
-                class="mt-4"
+                style={{ marginTop: "16px" }}
                 onSubmit$={async () => {
                   if (!commentText.value.trim() || !page.value) return;
                   commentLoading.value = true;
@@ -258,14 +241,16 @@ export default component$(() => {
                 }}
               >
                 <textarea
-                  class="ln-input min-h-[80px] resize-y"
+                  class="ln-input"
+                  style={{ minHeight: "80px", resize: "vertical" }}
                   placeholder="Leave a comment..."
                   value={commentText.value}
                   onInput$={(_, el) => { commentText.value = el.value; }}
                 />
                 <button
                   type="submit"
-                  class="mt-2 ln-btn ln-btn-primary text-[13px]"
+                  class="ln-btn ln-btn-primary"
+                  style={{ marginTop: "8px", fontSize: "13px" }}
                   disabled={commentLoading.value}
                 >
                   {commentLoading.value ? "Posting..." : "Post Comment"}
@@ -274,7 +259,152 @@ export default component$(() => {
             </section>
           )}
         </article>
-      </div>
+      </main>
+
+      {/* TOC toggle button — fixed bottom-left */}
+      {course.value?.sections && (
+        <button
+          onClick$={() => {
+            if (pinToc.value) {
+              // Unpin and close
+              pinToc.value = false;
+              showToc.value = false;
+              localStorage.setItem("learn_toc_pinned", "false");
+            } else {
+              showToc.value = !showToc.value;
+            }
+          }}
+          style={{
+            position: "fixed",
+            bottom: "16px",
+            left: "16px",
+            zIndex: 50,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "8px 14px",
+            background: tocVisible ? "var(--color-ink)" : "var(--color-paper-2)",
+            color: tocVisible ? "var(--color-paper)" : "var(--color-ink-3)",
+            border: tocVisible ? "none" : "1px solid var(--color-rule)",
+            borderRadius: "999px",
+            fontSize: "11px",
+            fontFamily: "var(--font-mono)",
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            boxShadow: "0 4px 20px -8px rgba(0,0,0,0.2)",
+            transition: "all 0.15s",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h10a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4V4zM18 20V8"/>
+          </svg>
+          {tocVisible ? "Close" : "Contents"}
+          {pinToc.value && (
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <circle cx="12" cy="12" r="4"/>
+            </svg>
+          )}
+        </button>
+      )}
+
+      {/* Sliding TOC panel */}
+      {course.value?.sections && tocVisible && (
+        <>
+          {/* Backdrop (only when not pinned) */}
+          {!pinToc.value && (
+            <div
+              onClick$={() => { showToc.value = false; }}
+              style={{
+                position: "fixed", inset: 0, zIndex: 44,
+                background: "rgba(0,0,0,0.15)",
+              }}
+            />
+          )}
+
+          <aside style={{
+            position: "fixed",
+            top: "57px",
+            left: 0,
+            bottom: 0,
+            width: "320px",
+            zIndex: 45,
+            background: "var(--color-paper)",
+            borderRight: "1px solid var(--color-rule)",
+            overflowY: "auto",
+            boxShadow: pinToc.value ? "none" : "4px 0 20px -4px rgba(0,0,0,0.1)",
+            transition: "box-shadow 0.15s",
+          }}>
+            {/* Header */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "16px 20px", borderBottom: "1px solid var(--color-rule)",
+              position: "sticky", top: 0, background: "var(--color-paper)", zIndex: 1,
+            }}>
+              <span class="mono" style={{ fontSize: "10.5px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-ink-3)" }}>
+                Table of Contents
+              </span>
+              <div style={{ display: "flex", gap: "4px" }}>
+                {/* Pin button */}
+                <button
+                  onClick$={() => {
+                    pinToc.value = !pinToc.value;
+                    localStorage.setItem("learn_toc_pinned", String(!pinToc.value ? "false" : "true"));
+                    if (pinToc.value) showToc.value = true;
+                  }}
+                  title={pinToc.value ? "Unpin sidebar" : "Pin sidebar"}
+                  style={{
+                    padding: "4px 8px", borderRadius: "3px",
+                    background: pinToc.value ? "var(--color-ink)" : "transparent",
+                    color: pinToc.value ? "var(--color-paper)" : "var(--color-ink-3)",
+                    fontSize: "11px", fontFamily: "var(--font-mono)",
+                    border: pinToc.value ? "none" : "1px solid var(--color-rule)",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {pinToc.value ? "Pinned" : "Pin"}
+                </button>
+                {/* Close button */}
+                <button
+                  onClick$={() => {
+                    showToc.value = false;
+                    pinToc.value = false;
+                    localStorage.setItem("learn_toc_pinned", "false");
+                  }}
+                  style={{
+                    padding: "4px 8px", borderRadius: "3px",
+                    color: "var(--color-ink-3)", fontSize: "11px",
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Course link */}
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--color-rule-soft)" }}>
+              <Link
+                href={`/courses/${resolvedCourseSlug.value}`}
+                style={{ fontSize: "13px", color: "var(--color-accent-ink)", fontWeight: 500 }}
+              >
+                ← Back to overview
+              </Link>
+            </div>
+
+            {/* TOC content */}
+            <div style={{ padding: "12px 20px 24px" }}>
+              <TableOfContents
+                courseSlug={resolvedCourseSlug.value}
+                sections={course.value.sections}
+                currentPageSlug={resolvedPageSlug.value}
+                completedPageIds={completedIds.value}
+              />
+            </div>
+          </aside>
+        </>
+      )}
+
       <ReadingProgress
         threshold={60}
         isComplete={pageMarkedComplete.value || (page.value ? completedIds.value.includes(page.value.id) : false)}
@@ -290,6 +420,6 @@ export default component$(() => {
         }}
       />
       <Lightbox src={lightboxSrc} alt={lightboxAlt} />
-    </main>
+    </>
   );
 });

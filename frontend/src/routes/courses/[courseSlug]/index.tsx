@@ -6,13 +6,20 @@ export const onStaticGenerate: StaticGenerateHandler = async () => {
 };
 import { get } from "~/lib/api";
 import type { Course, User } from "~/lib/types";
-import { TableOfContents } from "~/components/courses/TableOfContents";
 import {
   getCompletedPages,
   getBookmark,
   countPages,
   markPageRead,
 } from "~/lib/progress";
+
+/** Deterministic cover color from title */
+function tintFor(title: string): string {
+  const colors = ["#8A6B4A","#6A7F8C","#8C7A6B","#5E6E58","#8A5F5F","#6A5F8A","#7A8A4A","#4A6A7A","#9A7A4A","#6E5A7F"];
+  let h = 0;
+  for (let i = 0; i < title.length; i++) h = (h * 31 + title.charCodeAt(i)) >>> 0;
+  return colors[h % colors.length];
+}
 
 export default component$(() => {
   const loc = useLocation();
@@ -55,21 +62,17 @@ export default component$(() => {
           }
         }
       })
-      .catch((err) => {
-        error.value = err.message;
-      })
-      .finally(() => {
-        loading.value = false;
-      });
+      .catch((err) => { error.value = err.message; })
+      .finally(() => { loading.value = false; });
   });
 
   if (loading.value) {
     return (
-      <main class="max-w-4xl mx-auto px-7 py-10">
+      <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 32px" }}>
         <div class="animate-pulse">
-          <div class="h-8 bg-border-soft rounded w-64 mb-4" />
-          <div class="h-4 bg-border-soft rounded w-96 mb-8" />
-          <div class="h-48 bg-border-soft rounded-xl" />
+          <div style={{ height: "32px", background: "var(--color-rule-soft)", borderRadius: "3px", width: "256px", marginBottom: "16px" }} />
+          <div style={{ height: "16px", background: "var(--color-rule-soft)", borderRadius: "3px", width: "384px", marginBottom: "32px" }} />
+          <div style={{ height: "300px", background: "var(--color-rule-soft)", borderRadius: "3px" }} />
         </div>
       </main>
     );
@@ -77,11 +80,11 @@ export default component$(() => {
 
   if (error.value || !course.value) {
     return (
-      <main class="max-w-4xl mx-auto px-7 py-10">
+      <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 32px" }}>
         <div class="ln-panel">
           <div class="ln-panel-body">
-            <p class="text-failure text-[13px]">{error.value || "Course not found"}</p>
-            <Link href="/" class="text-accent text-[13px] mt-2 inline-block">Back to courses</Link>
+            <p style={{ color: "var(--color-failure)", fontSize: "13px" }}>{error.value || "Course not found"}</p>
+            <Link href="/dashboard" style={{ color: "var(--color-accent-ink)", fontSize: "13px", marginTop: "8px", display: "inline-block" }}>Back to library</Link>
           </div>
         </div>
       </main>
@@ -96,100 +99,155 @@ export default component$(() => {
 
   const doneCount = completedIds.value.length;
   const pct = totalPages.value > 0 ? Math.round((doneCount / totalPages.value) * 100) : 0;
+  const remaining = Math.max(1, Math.round((totalPages.value - doneCount) * 3));
+
+  // Build flat chapter list from sections
+  const chapters = (c.sections || []).map((sec, si) => {
+    const sectionPages = sec.pages || [];
+    const sectionDone = sectionPages.every((p) => completedIds.value.includes(p.id));
+    const sectionPartial = sectionPages.some((p) => completedIds.value.includes(p.id));
+    // Current section is the first non-complete section
+    const isCurrent = !sectionDone && (si === 0 || (c.sections || []).slice(0, si).every((prev) =>
+      (prev.pages || []).every((p) => completedIds.value.includes(p.id))
+    ));
+    return {
+      n: si + 1,
+      title: sec.title,
+      slug: sec.slug,
+      pages: sectionPages.length,
+      done: sectionDone,
+      partial: sectionPartial,
+      current: isCurrent,
+      firstPageSlug: sectionPages[0]?.slug,
+    };
+  });
 
   return (
-    <main class="max-w-4xl mx-auto px-7 py-10">
+    <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 32px 80px" }}>
       {/* Breadcrumb */}
-      <div class="ln-breadcrumb mb-6">
-        <Link href="/dashboard" class="hover:text-text transition-colors">learn</Link>
-        <span class="text-border-soft">/</span>
-        <b>{c.title}</b>
+      <div class="ln-breadcrumb" style={{ marginBottom: "24px" }}>
+        <Link href="/dashboard">Library</Link>
+        <span style={{ margin: "0 8px" }}>/</span>
+        <span style={{ color: "var(--color-ink)" }}>{c.title}</span>
       </div>
 
-      {/* Cover image */}
-      {c.cover_image_url && (
-        <div class="ln-panel mb-6 overflow-hidden">
-          <img
-            src={c.cover_image_url}
-            alt={c.title}
-            class="w-full h-48 object-cover"
-            width={800}
-            height={192}
-          />
+      {/* Book hero */}
+      <section style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "56px", marginBottom: "56px" }}>
+        <div class="ln-cover ln-cover-lg" style={{ background: tintFor(c.title), height: "380px", maxWidth: "280px" }}>
+          <div class="ln-cover-texture" />
+          <div class="ln-cover-text" style={{ inset: "24px 18px", fontSize: "22px" }}>
+            <div class="learn-label" style={{ fontSize: "10px" }}>Learn</div>
+            <div style={{ textWrap: "pretty" }}>{c.title}</div>
+          </div>
         </div>
-      )}
 
-      {/* Course header */}
-      <div class="mb-6">
-        <div class="flex items-start justify-between gap-4">
-          <h1 class="text-[28px] font-semibold tracking-[-0.024em]">{c.title}</h1>
+        <div>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+            <span class="ln-tag">{c.sections?.length || 0} chapters · {totalPages.value} pages</span>
+          </div>
+          <h1 class="serif" style={{ fontSize: "56px", margin: 0, lineHeight: 1, letterSpacing: "-0.02em", fontWeight: 400 }}>
+            {c.title}
+          </h1>
+          {c.description && (
+            <p style={{ fontSize: "16px", color: "var(--color-ink-2)", lineHeight: 1.55, maxWidth: "560px", marginTop: "20px" }}>
+              {c.description}
+            </p>
+          )}
+
+          {/* Stats panel */}
+          <div style={{
+            marginTop: "32px", padding: "20px",
+            background: "var(--color-paper-2)", border: "1px solid var(--color-rule)", borderRadius: "3px",
+            display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "24px",
+          }}>
+            <div>
+              <div class="mono" style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-ink-3)" }}>Progress</div>
+              <div class="serif" style={{ fontSize: "28px", marginTop: "4px" }}>{pct}%</div>
+              <div style={{ marginTop: "8px" }}><div class="ln-track"><div style={{ width: `${pct}%` }} /></div></div>
+            </div>
+            <div>
+              <div class="mono" style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-ink-3)" }}>Time left</div>
+              <div class="serif" style={{ fontSize: "28px", marginTop: "4px" }}>{remaining}<span style={{ fontSize: "14px", color: "var(--color-ink-3)" }}> min</span></div>
+              <div style={{ fontSize: "12px", color: "var(--color-ink-3)", marginTop: "8px" }}>{totalPages.value - doneCount} pages remaining</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+              {bookmark.value ? (
+                <Link href={bookmark.value.href} class="ln-btn ln-btn-primary">
+                  Resume reading
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </Link>
+              ) : firstPage ? (
+                <Link href={firstPage} class="ln-btn ln-btn-primary">
+                  Start reading
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </Link>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Admin edit */}
           {user.value && (user.value.role === "admin" || user.value.role === "editor") && (
-            <Link href={`/dashboard/courses/${c.id}`} class="ln-btn ln-btn-outline text-[12px]">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Edit
-            </Link>
+            <div style={{ marginTop: "16px" }}>
+              <Link href={`/dashboard/courses/${c.id}`} class="ln-btn ln-btn-ghost" style={{ fontSize: "12px" }}>
+                Edit course
+              </Link>
+            </div>
           )}
         </div>
-        {c.description && (
-          <p class="text-muted text-[15px] mt-2 max-w-[640px]">{c.description}</p>
-        )}
-        <div class="flex items-center gap-3 font-mono text-[11px] text-subtle mt-3">
-          {c.author_name && <span>by {c.author_name}</span>}
-          {c.created_at && (
-            <span>{new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-          )}
-          <span>{totalPages.value} pages</span>
-        </div>
-      </div>
+      </section>
 
-      {/* Progress bar */}
-      {totalPages.value > 0 && doneCount > 0 && (
-        <div class="mb-6">
-          <div class="flex items-center justify-between font-mono text-[11px] mb-1.5">
-            <span class="text-subtle">{doneCount} of {totalPages.value} pages read</span>
-            <span class="text-accent">{pct}%</span>
-          </div>
-          <div class="ln-track">
-            <div style={{ width: `${pct}%` }} />
-          </div>
+      {/* Table of contents */}
+      <section>
+        <div class="ln-section-header">
+          <span class="label">TOC &nbsp;/&nbsp; Table of contents</span>
         </div>
-      )}
 
-      {/* Action buttons */}
-      <div class="flex items-center gap-2 mb-8">
-        {bookmark.value && (
-          <Link href={bookmark.value.href} class="ln-btn ln-btn-primary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
-            Continue Reading
-          </Link>
-        )}
-        {firstPage && !bookmark.value && (
-          <Link href={firstPage} class="ln-btn ln-btn-primary">
-            Start Reading
-          </Link>
-        )}
-        {firstPage && bookmark.value && (
-          <Link href={firstPage} class="ln-btn ln-btn-outline">
-            Start Over
-          </Link>
-        )}
-      </div>
-
-      {/* Table of Contents */}
-      {c.sections && c.sections.length > 0 && (
-        <div class="ln-panel">
-          <div class="ln-panel-head">
-            <h3>Table of Contents</h3>
-          </div>
-          <div class="ln-panel-body">
-            <TableOfContents
-              courseSlug={c.slug}
-              sections={c.sections}
-              completedPageIds={completedIds.value}
-            />
-          </div>
+        <div>
+          {chapters.map((ch) => (
+            <div key={ch.n} style={{
+              display: "grid", gridTemplateColumns: "40px 1fr 80px 100px",
+              gap: "20px", alignItems: "center",
+              padding: "14px 4px", borderBottom: "1px solid var(--color-rule-soft)",
+              opacity: ch.done ? 0.55 : 1,
+              background: ch.current ? "var(--color-paper-2)" : "transparent",
+              borderLeft: ch.current ? "2px solid var(--color-accent)" : "2px solid transparent",
+              paddingLeft: "12px",
+            }}>
+              <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)" }}>
+                {String(ch.n).padStart(2, "0")}
+              </span>
+              <div>
+                <div class="serif" style={{ fontSize: "17px", lineHeight: 1.2, letterSpacing: "-0.005em" }}>
+                  {ch.title}
+                </div>
+                {ch.current && (
+                  <div style={{ fontSize: "11px", color: "var(--color-accent-ink)", marginTop: "3px", fontWeight: 500 }}>
+                    Up next — you'll pick up here
+                  </div>
+                )}
+              </div>
+              <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)" }}>
+                {ch.pages} pages
+              </span>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                {ch.done ? (
+                  <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                    done
+                  </span>
+                ) : ch.current && ch.firstPageSlug ? (
+                  <Link href={`/courses/${c.slug}/${ch.slug}/${ch.firstPageSlug}`} class="ln-btn ln-btn-primary" style={{ padding: "8px 14px", fontSize: "12px" }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+                    Read
+                  </Link>
+                ) : (
+                  <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-4)" }}>—</span>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+      </section>
     </main>
   );
 });

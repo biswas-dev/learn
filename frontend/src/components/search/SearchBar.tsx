@@ -88,14 +88,14 @@ export const SearchBar = component$(() => {
           isOpen.value = true;
           setTimeout(() => document.getElementById("search-input")?.focus(), 50);
         }}
-        class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border-soft bg-surface hover:bg-surface-hover text-subtle text-[12px] font-mono transition-colors"
+        class="ln-search-pill"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
-        <span class="hidden sm:inline">Search</span>
-        <span class="ln-kbd hidden sm:inline">⌘K</span>
+        <span class="ln-search-label">Search across your library</span>
+        <span class="ln-kbd">⌘K</span>
       </button>
 
       {/* Modal overlay */}

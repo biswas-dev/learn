@@ -8,7 +8,7 @@
 set -euo pipefail
 
 COUNT="${1:-100}"
-API_KEY="${2:-lrn_ce51a0e9f5e7f4036a338fe4b8e2b60b81c850594a340972c12bf364c9d6cf5e}"
+API_KEY="${2:-}"
 CATALOG="$HOME/.config/go-educative/catalog.json"
 COOKIE_FILE="$HOME/.config/go-educative/cookie.txt"
 API_URL="http://localhost:8080"
@@ -23,6 +23,15 @@ JWT=$(curl -s -X POST "$API_URL/api/auth/login" \
   -H 'Content-Type: application/json' \
   -d '{"email":"anshuman@biswas.me","password":"Learn2026!"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+# Auto-create a fresh API key if none provided (the scraper needs an lrn_ key, not a JWT)
+if [ -z "$API_KEY" ]; then
+  API_KEY=$(curl -s -X POST "$API_URL/api/api-keys" \
+    -H "Authorization: Bearer $JWT" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"batch-scrape-auto"}' \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
+fi
 
 echo "=== Batch scrape: $COUNT courses ==="
 echo "API Key: ${API_KEY:0:15}..."
@@ -165,7 +174,7 @@ PYEOF
 
   # Count total pages and images from scraper output
   TOTAL_IMGS=$(echo "$SCRAPE_OUTPUT" | grep -c "imgs)" || true)
-  TOTAL_PAGES=$(echo "$SCRAPE_OUTPUT" | grep -c "Scraping:" || true)
+  TOTAL_PAGES=$(echo "$SCRAPE_OUTPUT" | grep -c "Uploading:" || true)
 
   echo "  Pages scraped: $TOTAL_PAGES, Pages with images: $TOTAL_IMGS"
 
