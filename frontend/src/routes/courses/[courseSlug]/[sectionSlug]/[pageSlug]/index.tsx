@@ -38,6 +38,17 @@ export default component$(() => {
 
   useImageLightbox(lightboxSrc, lightboxAlt);
 
+  // Open TOC when mouse moves to the left edge of the browser
+  useVisibleTask$(({ cleanup }) => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (e.clientX <= 8 && !showToc.value && !pinToc.value) {
+        showToc.value = true;
+      }
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    cleanup(() => window.removeEventListener("mousemove", onMouseMove));
+  });
+
   useVisibleTask$(({ track }) => {
     track(() => loc.url.pathname);
     const parts = window.location.pathname.split("/").filter(Boolean);
@@ -343,25 +354,27 @@ export default component$(() => {
               <span class="mono" style={{ fontSize: "10.5px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-ink-3)" }}>
                 Table of Contents
               </span>
-              <div style={{ display: "flex", gap: "4px" }}>
-                {/* Pin button */}
+              <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                {/* Pin toggle icon */}
                 <button
                   onClick$={() => {
                     pinToc.value = !pinToc.value;
-                    localStorage.setItem("learn_toc_pinned", String(!pinToc.value ? "false" : "true"));
+                    localStorage.setItem("learn_toc_pinned", pinToc.value ? "true" : "false");
                     if (pinToc.value) showToc.value = true;
                   }}
                   title={pinToc.value ? "Unpin sidebar" : "Pin sidebar"}
                   style={{
-                    padding: "4px 8px", borderRadius: "3px",
+                    padding: "6px", borderRadius: "3px",
                     background: pinToc.value ? "var(--color-ink)" : "transparent",
                     color: pinToc.value ? "var(--color-paper)" : "var(--color-ink-3)",
-                    fontSize: "11px", fontFamily: "var(--font-mono)",
-                    border: pinToc.value ? "none" : "1px solid var(--color-rule)",
+                    display: "grid", placeItems: "center",
                     transition: "all 0.15s",
+                    transform: pinToc.value ? "rotate(0deg)" : "rotate(45deg)",
                   }}
                 >
-                  {pinToc.value ? "Pinned" : "Pin"}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2v8M15 5l-3 3-3-3M9 13h6M10 13v5a2 2 0 0 0 4 0v-5M12 18v4"/>
+                  </svg>
                 </button>
                 {/* Close button */}
                 <button
@@ -371,7 +384,7 @@ export default component$(() => {
                     localStorage.setItem("learn_toc_pinned", "false");
                   }}
                   style={{
-                    padding: "4px 8px", borderRadius: "3px",
+                    padding: "6px", borderRadius: "3px",
                     color: "var(--color-ink-3)", fontSize: "11px",
                   }}
                 >
