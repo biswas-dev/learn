@@ -74,6 +74,12 @@ export const Navbar = component$(() => {
             {(user.value!.role === "admin" || user.value!.role === "editor") && (
               <AdminMenu />
             )}
+            <Link
+              href="/dashboard/api-keys"
+              style={{ color: "var(--color-ink-3)", whiteSpace: "nowrap", textDecoration: "none" }}
+            >
+              API&nbsp;Keys
+            </Link>
             <button
               style={{ color: "var(--color-ink-3)", whiteSpace: "nowrap" }}
               onClick$={() => {
