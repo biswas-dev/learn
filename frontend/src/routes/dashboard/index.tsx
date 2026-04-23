@@ -456,12 +456,13 @@ export default component$(() => {
                   </div>
                   <div>
                     {courses.map((b) => (
-                      <a key={b.id} href={`/courses/${b.slug}/`} style={{
+                      <div key={b.id} onClick$={() => { window.location.href = `/courses/${b.slug}/`; }} style={{
                         display: "grid", gridTemplateColumns: "48px 2fr 1fr 1fr 60px",
                         gap: "20px", alignItems: "center",
                         padding: "14px 4px", borderBottom: "1px solid var(--color-rule-soft)",
                         textDecoration: "none", color: "inherit",
                         transition: "background 0.15s",
+                        cursor: "pointer",
                       }}
                       onMouseEnter$={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = "var(--color-paper-2)"; }}
                       onMouseLeave$={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
@@ -500,7 +501,7 @@ export default component$(() => {
                         <div style={{ textAlign: "right", color: "var(--color-ink-3)" }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                         </div>
-                      </a>
+                      </div>
                     ))}
                   </div>
                 </section>
