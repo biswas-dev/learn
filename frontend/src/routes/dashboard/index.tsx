@@ -136,8 +136,20 @@ export default component$(() => {
 
         {/* Loading */}
         {loading.value && (
-          <div style={{ marginTop: "48px" }} class="animate-pulse">
-            <div style={{ height: "300px", background: "var(--color-rule-soft)", borderRadius: "3px" }} />
+          <div style={{ marginTop: isLibraryView ? "24px" : "48px" }}>
+            {isLibraryView && (
+              <div class="mono" style={{ fontSize: "11px", letterSpacing: "0.14em", marginBottom: "24px", color: "var(--color-ink-3)" }}>
+                LOADING LIBRARY...
+              </div>
+            )}
+            <div class="animate-pulse" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {[...Array(8)].map((_, i) => (
+                <div key={i} style={{
+                  height: "52px", background: "var(--color-rule-soft)", borderRadius: "3px",
+                  opacity: 1 - i * 0.1,
+                }} />
+              ))}
+            </div>
           </div>
         )}
 
@@ -444,7 +456,7 @@ export default component$(() => {
                   </div>
                   <div>
                     {courses.map((b) => (
-                      <Link key={b.id} href={`/courses/${b.slug}/`} style={{
+                      <a key={b.id} href={`/courses/${b.slug}/`} style={{
                         display: "grid", gridTemplateColumns: "48px 2fr 1fr 1fr 60px",
                         gap: "20px", alignItems: "center",
                         padding: "14px 4px", borderBottom: "1px solid var(--color-rule-soft)",
@@ -488,7 +500,7 @@ export default component$(() => {
                         <div style={{ textAlign: "right", color: "var(--color-ink-3)" }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                         </div>
-                      </Link>
+                      </a>
                     ))}
                   </div>
                 </section>
