@@ -131,6 +131,9 @@ var migrations = []string{
 		content='', tokenize='porter unicode61'
 	)`,
 
+	// API key expiration
+	"ALTER TABLE api_keys ADD COLUMN expires_at DATETIME",
+
 	// Page embeddings for semantic vector search
 	`CREATE TABLE IF NOT EXISTS page_embeddings (
 		page_id INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,

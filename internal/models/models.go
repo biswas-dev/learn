@@ -170,6 +170,7 @@ type APIKey struct {
 	Name      string `json:"name"`
 	KeyHash   string `json:"-"`
 	KeyPrefix string `json:"key_prefix"`
+	ExpiresAt string `json:"expires_at,omitempty"` // empty = never expires
 	CreatedAt string `json:"created_at"`
 }
 

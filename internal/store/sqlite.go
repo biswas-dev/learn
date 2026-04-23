@@ -508,9 +508,13 @@ func (s *SQLiteStore) GetCourseProgress(ctx context.Context, userID, courseID in
 // --- API Keys ---
 
 func (s *SQLiteStore) CreateAPIKey(ctx context.Context, k *models.APIKey) error {
+	var expiresAt any
+	if k.ExpiresAt != "" {
+		expiresAt = k.ExpiresAt
+	}
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO api_keys (user_id, name, key_hash, key_prefix) VALUES (?, ?, ?, ?)`,
-		k.UserID, k.Name, k.KeyHash, k.KeyPrefix)
+		`INSERT INTO api_keys (user_id, name, key_hash, key_prefix, expires_at) VALUES (?, ?, ?, ?, ?)`,
+		k.UserID, k.Name, k.KeyHash, k.KeyPrefix, expiresAt)
 	if err != nil {
 		return err
 	}
@@ -519,14 +523,17 @@ func (s *SQLiteStore) CreateAPIKey(ctx context.Context, k *models.APIKey) error 
 }
 
 func (s *SQLiteStore) GetUserByAPIKeyHash(ctx context.Context, keyHash string) (*models.User, error) {
+	// Check expiration: only match non-expired keys
 	return s.scanUser(s.db.QueryRowContext(ctx,
 		`SELECT u.id, u.email, u.password_hash, u.display_name, u.role, u.created_at, u.updated_at
-		 FROM users u JOIN api_keys k ON u.id = k.user_id WHERE k.key_hash = ?`, keyHash))
+		 FROM users u JOIN api_keys k ON u.id = k.user_id
+		 WHERE k.key_hash = ? AND (k.expires_at IS NULL OR k.expires_at > datetime('now'))`, keyHash))
 }
 
 func (s *SQLiteStore) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, key_prefix, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`, userID)
+		`SELECT id, user_id, name, key_prefix, COALESCE(expires_at, ''), created_at
+		 FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +541,7 @@ func (s *SQLiteStore) ListAPIKeys(ctx context.Context, userID int64) ([]models.A
 	var keys []models.APIKey
 	for rows.Next() {
 		k := models.APIKey{}
-		if err := rows.Scan(&k.ID, &k.UserID, &k.Name, &k.KeyPrefix, &k.CreatedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.UserID, &k.Name, &k.KeyPrefix, &k.ExpiresAt, &k.CreatedAt); err != nil {
 			return nil, err
 		}
 		keys = append(keys, k)
