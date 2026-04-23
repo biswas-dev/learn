@@ -117,6 +117,14 @@ func main() {
 	courseSlug, _ := courseResp["slug"].(string)
 	fmt.Printf("Created course in learn: id=%d slug=%s\n", courseID, courseSlug)
 
+	// Tag course with "educative" source tag
+	learnPost(fmt.Sprintf("/api/courses/%d/tags", courseID), map[string]any{
+		"tags": []map[string]string{
+			{"name": "Educative", "category": "Source"},
+		},
+	})
+	fmt.Println("Tagged course with educative source")
+
 	// Step 4: Extract TOC and scrape
 	toc, _ := details["toc"].(map[string]any)
 	categories, _ := toc["categories"].([]any)

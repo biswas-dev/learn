@@ -20,6 +20,10 @@ export const CourseCard = component$<Props>(({ course }) => {
   const tags = isSummary(course) ? course.tags : undefined;
   const readingMins = Math.max(1, Math.round(pageCount * 3));
 
+  // Extract source tag (category === "Source") for display
+  const sourceTag = tags?.find((t) => t.category === "Source");
+  const contentTags = tags?.filter((t) => t.category !== "Source");
+
   return (
     <Link
       href={`/courses/${course.slug}/`}
@@ -60,19 +64,24 @@ export const CourseCard = component$<Props>(({ course }) => {
       )}
 
       {/* Tags */}
-      {tags && tags.length > 0 && (
+      {((contentTags && contentTags.length > 0) || sourceTag) && (
         <div class="flex flex-wrap gap-1 mb-3">
-          {tags.slice(0, 2).map((tag) => (
+          {contentTags?.slice(0, 2).map((tag) => (
             <TagBadge key={tag.id} name={tag.name} category={tag.category} />
           ))}
-          {tags.length > 2 && (
-            <span class="font-mono text-[10.5px] text-subtle px-1">+{tags.length - 2}</span>
+          {contentTags && contentTags.length > 2 && (
+            <span class="font-mono text-[10.5px] text-subtle px-1">+{contentTags.length - 2}</span>
           )}
         </div>
       )}
 
       {/* Metadata row */}
       <div class="flex items-center gap-3 font-mono text-[11px] text-subtle mt-auto">
+        {sourceTag && (
+          <span class="ln-source-badge" data-source={sourceTag.slug}>
+            {sourceTag.name}
+          </span>
+        )}
         <span class="flex items-center gap-1">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />

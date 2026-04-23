@@ -902,7 +902,7 @@ func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64, isAdmin bo
 		 JOIN tags t ON ct.tag_id = t.id
 		 JOIN courses c ON ct.course_id = c.id
 		 LEFT JOIN users u ON c.created_by = u.id
-		 WHERE c.is_published = 1` + protectedFilter + `
+		 WHERE c.is_published = 1 AND t.category != 'Source'` + protectedFilter + `
 		 ORDER BY t.category, c.title`
 	catRows, err := s.db.QueryContext(ctx, catQuery, protectedArgs...)
 	if err != nil {
@@ -933,12 +933,17 @@ func (s *SQLiteStore) GetDashboard(ctx context.Context, userID int64, isAdmin bo
 			continue
 		}
 		seen[category][cs.ID] = true
-		// Limit to 4 courses per category in dashboard
-		if len(resp.Categories[category]) < 4 {
-			resp.Categories[category] = append(resp.Categories[category], cs)
-		}
+		resp.Categories[category] = append(resp.Categories[category], cs)
 	}
 	catRows.Close()
+
+	// Enrich category courses with tags
+	for cat := range resp.Categories {
+		for i := range resp.Categories[cat] {
+			tags, _ := s.ListCourseTags(ctx, resp.Categories[cat][i].ID)
+			resp.Categories[cat][i].Tags = tags
+		}
+	}
 
 	return resp, nil
 }
@@ -1005,6 +1010,12 @@ func (s *SQLiteStore) ListCoursesPaginated(ctx context.Context, page, size int, 
 	summaries, err := s.scanCourseSummaries(rows)
 	if err != nil {
 		return nil, err
+	}
+
+	// Enrich with tags
+	for i := range summaries {
+		tags, _ := s.ListCourseTags(ctx, summaries[i].ID)
+		summaries[i].Tags = tags
 	}
 
 	return &models.PaginatedCourses{

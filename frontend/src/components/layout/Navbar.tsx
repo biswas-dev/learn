@@ -29,12 +29,13 @@ export const Navbar = component$(() => {
   const pathname = loc.url.pathname;
 
   // Determine active tab
-  const activeTab = pathname.startsWith("/dashboard")
-    ? "dashboard"
-    : pathname.startsWith("/courses/")
-      ? "course"
-      : pathname === "/library/" || pathname === "/library"
-        ? "library"
+  const search = loc.url.search;
+  const activeTab = pathname.startsWith("/dashboard") && search.includes("view=library")
+    ? "library"
+    : pathname.startsWith("/dashboard")
+      ? "dashboard"
+      : pathname.startsWith("/courses/")
+        ? "course"
         : "";
 
   // Logged-in nav with tabs
@@ -55,7 +56,7 @@ export const Navbar = component$(() => {
               Today
             </Link>
             <Link
-              href="/dashboard"
+              href="/dashboard?view=library"
               class={`ln-nav-tab ${activeTab === "library" ? "active" : ""}`}
             >
               Library

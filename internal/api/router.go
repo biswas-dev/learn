@@ -105,6 +105,8 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 			r.Get("/api/pages/{pageId}/versions", pageH.ListVersions)
 			r.Post("/api/pages/{pageId}/versions/{versionNum}/restore", pageH.RestoreVersion)
 
+			r.Post("/api/courses/{courseId}/tags", tagH.AddCourseTags)
+
 			r.Post("/api/import/course", importH.ImportCourse)
 			r.Post("/api/import/bulk", importH.BulkImport)
 		})

@@ -321,6 +321,27 @@ button { cursor: pointer; background: none; border: none; font: inherit; color: 
   display: inline-block;
 }
 
+.ln-source-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.ln-source-badge[data-source="educative"] {
+  color: #2563eb;
+  background: color-mix(in oklch, #2563eb 12%, transparent);
+  border: 1px solid color-mix(in oklch, #2563eb 30%, transparent);
+}
+.ln-source-badge[data-source="bytebytego"] {
+  color: #059669;
+  background: color-mix(in oklch, #059669 12%, transparent);
+  border: 1px solid color-mix(in oklch, #059669 30%, transparent);
+}
+
 /* ─── Book cover ─────────────────── */
 
 .ln-cover {

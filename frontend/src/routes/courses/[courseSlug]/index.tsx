@@ -203,49 +203,59 @@ export default component$(() => {
         </div>
 
         <div>
-          {chapters.map((ch) => (
-            <div key={ch.n} style={{
-              display: "grid", gridTemplateColumns: "40px 1fr 80px 100px",
-              gap: "20px", alignItems: "center",
-              padding: "14px 4px", borderBottom: "1px solid var(--color-rule-soft)",
-              opacity: ch.done ? 0.55 : 1,
-              background: ch.current ? "var(--color-paper-2)" : "transparent",
-              borderLeft: ch.current ? "2px solid var(--color-accent)" : "2px solid transparent",
-              paddingLeft: "12px",
-            }}>
-              <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)" }}>
-                {String(ch.n).padStart(2, "0")}
-              </span>
-              <div>
-                <div class="serif" style={{ fontSize: "17px", lineHeight: 1.2, letterSpacing: "-0.005em" }}>
-                  {ch.title}
-                </div>
-                {ch.current && (
-                  <div style={{ fontSize: "11px", color: "var(--color-accent-ink)", marginTop: "3px", fontWeight: 500 }}>
-                    Up next — you'll pick up here
+          {chapters.map((ch) => {
+            const chapterHref = ch.firstPageSlug ? `/courses/${c.slug}/${ch.slug}/${ch.firstPageSlug}` : undefined;
+            return (
+              <Link key={ch.n} href={chapterHref || "#"} style={{
+                display: "grid", gridTemplateColumns: "40px 1fr 80px 100px",
+                gap: "20px", alignItems: "center",
+                padding: "14px 4px", borderBottom: "1px solid var(--color-rule-soft)",
+                opacity: ch.done ? 0.55 : 1,
+                background: ch.current ? "var(--color-paper-2)" : "transparent",
+                borderLeft: ch.current ? "2px solid var(--color-accent)" : "2px solid transparent",
+                paddingLeft: "12px",
+                textDecoration: "none", color: "inherit", cursor: "pointer",
+                transition: "background 0.1s",
+              }}
+              onMouseEnter$={(e: MouseEvent) => { if (!ch.current) (e.currentTarget as HTMLElement).style.background = "var(--color-paper-2)"; }}
+              onMouseLeave$={(e: MouseEvent) => { if (!ch.current) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              >
+                <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)" }}>
+                  {String(ch.n).padStart(2, "0")}
+                </span>
+                <div>
+                  <div class="serif" style={{ fontSize: "17px", lineHeight: 1.2, letterSpacing: "-0.005em" }}>
+                    {ch.title}
                   </div>
-                )}
-              </div>
-              <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)" }}>
-                {ch.pages} pages
-              </span>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                {ch.done ? (
-                  <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-                    done
-                  </span>
-                ) : ch.current && ch.firstPageSlug ? (
-                  <Link href={`/courses/${c.slug}/${ch.slug}/${ch.firstPageSlug}`} class="ln-btn ln-btn-primary" style={{ padding: "8px 14px", fontSize: "12px" }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></svg>
-                    Read
-                  </Link>
-                ) : (
-                  <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-4)" }}>—</span>
-                )}
-              </div>
-            </div>
-          ))}
+                  {ch.current && (
+                    <div style={{ fontSize: "11px", color: "var(--color-accent-ink)", marginTop: "3px", fontWeight: 500 }}>
+                      Up next — you'll pick up here
+                    </div>
+                  )}
+                </div>
+                <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)" }}>
+                  {ch.pages} pages
+                </span>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  {ch.done ? (
+                    <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                      done
+                    </span>
+                  ) : ch.current ? (
+                    <span class="ln-btn ln-btn-primary" style={{ padding: "8px 14px", fontSize: "12px" }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+                      Read
+                    </span>
+                  ) : (
+                    <span class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    </span>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
     </main>

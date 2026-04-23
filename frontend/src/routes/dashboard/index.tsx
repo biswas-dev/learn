@@ -1,5 +1,5 @@
 import { component$, useSignal, useVisibleTask$, $ } from "@builder.io/qwik";
-import { Link } from "@builder.io/qwik-city";
+import { Link, useLocation } from "@builder.io/qwik-city";
 import { get } from "~/lib/api";
 import type { DashboardData, CourseSummary, Tag } from "~/lib/types";
 
@@ -19,11 +19,15 @@ function timeOfDayGreeting(): string {
 }
 
 export default component$(() => {
+  const loc = useLocation();
+  const isLibraryView = loc.url.searchParams.get("view") === "library";
+
   const dashboard = useSignal<DashboardData | null>(null);
   const allTags = useSignal<Tag[]>([]);
   const loading = useSignal(true);
   const error = useSignal("");
   const activeCategory = useSignal("");
+  const activeSource = useSignal("");
   const searchQuery = useSignal("");
   const searchResults = useSignal<CourseSummary[]>([]);
   const searching = useSignal(false);
@@ -71,10 +75,26 @@ export default component$(() => {
   const d = dashboard.value;
   const activeCourse = d?.in_progress?.[0];
   const otherInProgress = d?.in_progress?.slice(1) || [];
+
+  // Separate "Source" from topic categories
+  const sourceTags = allTags.value.filter((t) => t.category === "Source");
+  const topicCategories = [...new Set(allTags.value.filter((t) => t.category !== "Source").map((t) => t.category))].sort();
+
+  // Filter courses within each category by selected source
+  const filterBySource = (courses: CourseSummary[]) => {
+    if (!activeSource.value) return courses;
+    return courses.filter((c) =>
+      c.tags?.some((t) => t.category === "Source" && t.slug === activeSource.value)
+    );
+  };
+
   const sortedCategories = d
-    ? Object.entries(d.categories).sort((a, b) => b[1].length - a[1].length)
+    ? Object.entries(d.categories)
+        .filter(([cat]) => cat !== "Source")
+        .map(([cat, courses]) => [cat, filterBySource(courses)] as [string, CourseSummary[]])
+        .filter(([, courses]) => courses.length > 0)
+        .sort((a, b) => b[1].length - a[1].length)
     : [];
-  const categories = [...new Set(allTags.value.map((t) => t.category))].sort();
   const visibleCategories = activeCategory.value
     ? sortedCategories.filter(([cat]) => cat === activeCategory.value)
     : sortedCategories;
@@ -85,22 +105,26 @@ export default component$(() => {
     <div style={{ background: "var(--color-paper)", minHeight: "100vh" }}>
       <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 32px 80px" }}>
         {/* Greeting */}
-        <div class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)", letterSpacing: "0.14em", marginBottom: "12px" }}>
-          {dateStr}
-        </div>
-        <h1 class="serif" style={{ fontSize: "44px", margin: 0, lineHeight: 1.05, letterSpacing: "-0.02em", fontWeight: 400 }}>
-          {timeOfDayGreeting()}, {userName.value}.
-        </h1>
+        {!isLibraryView && (
+          <>
+            <div class="mono" style={{ fontSize: "11px", color: "var(--color-ink-3)", letterSpacing: "0.14em", marginBottom: "12px" }}>
+              {dateStr}
+            </div>
+            <h1 class="serif" style={{ fontSize: "44px", margin: 0, lineHeight: 1.05, letterSpacing: "-0.02em", fontWeight: 400 }}>
+              {timeOfDayGreeting()}, {userName.value}.
+            </h1>
 
-        {activeCourse && (
-          <p style={{ fontSize: "15.5px", color: "var(--color-ink-2)", maxWidth: "620px", marginTop: "14px", marginBottom: 0 }}>
-            {activeCourse.progress_pct > 0 && (
-              <>
-                You're {Math.round(activeCourse.progress_pct)}% through <strong style={{ color: "var(--color-ink)" }}>{activeCourse.title}</strong> —{" "}
-                about {Math.max(1, Math.round((activeCourse.total_pages - activeCourse.completed_pages) * 3))} minutes left.
-              </>
+            {activeCourse && (
+              <p style={{ fontSize: "15.5px", color: "var(--color-ink-2)", maxWidth: "620px", marginTop: "14px", marginBottom: 0 }}>
+                {activeCourse.progress_pct > 0 && (
+                  <>
+                    You're {Math.round(activeCourse.progress_pct)}% through <strong style={{ color: "var(--color-ink)" }}>{activeCourse.title}</strong> —{" "}
+                    about {Math.max(1, Math.round((activeCourse.total_pages - activeCourse.completed_pages) * 3))} minutes left.
+                  </>
+                )}
+              </p>
             )}
-          </p>
+          </>
         )}
 
         {/* Error */}
@@ -153,7 +177,7 @@ export default component$(() => {
         {d && searchQuery.value.length < 2 && (
           <>
             {/* HERO: Continue reading */}
-            {activeCourse && (
+            {activeCourse && !isLibraryView && (
               <section style={{ marginTop: "48px" }}>
                 {/* Section header */}
                 <div class="ln-section-header">
@@ -258,7 +282,7 @@ export default component$(() => {
             )}
 
             {/* Row 2: Also in progress + Library browse */}
-            <section class="dash-row2" style={{
+            {!isLibraryView && <section class="dash-row2" style={{
               marginTop: "64px",
               display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: "48px",
             }}>
@@ -332,10 +356,10 @@ export default component$(() => {
                   ))}
                 </div>
               </div>
-            </section>
+            </section>}
 
             {/* Full library browse */}
-            <section style={{ marginTop: "64px" }}>
+            <section style={{ marginTop: isLibraryView ? "24px" : "64px" }}>
               <div class="ln-section-header">
                 <span class="label">Library &nbsp;·&nbsp; {d.total_courses} books</span>
                 <div style={{ flex: 1 }} />
@@ -360,6 +384,36 @@ export default component$(() => {
                 </div>
               </div>
 
+              {/* Source filter */}
+              {sourceTags.length > 1 && (
+                <div style={{
+                  display: "flex", gap: "6px", alignItems: "center",
+                  marginBottom: "16px",
+                }}>
+                  <span class="mono" style={{ fontSize: "10.5px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-ink-4)", marginRight: "4px" }}>
+                    Source
+                  </span>
+                  <button
+                    onClick$={() => { activeSource.value = ""; }}
+                    class={`ln-chip ${activeSource.value === "" ? "active" : ""}`}
+                  >
+                    All
+                  </button>
+                  {sourceTags.map((st) => (
+                    <button
+                      key={st.id}
+                      onClick$={() => { activeSource.value = activeSource.value === st.slug ? "" : st.slug; }}
+                      class={`ln-chip ${activeSource.value === st.slug ? "active" : ""}`}
+                    >
+                      <span class="ln-source-badge" data-source={st.slug} style={{ marginRight: "4px" }}>
+                        {st.name}
+                      </span>
+                      {st.count}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Topic filter */}
               <div style={{
                 display: "flex", gap: "2px", flexWrap: "wrap",
@@ -371,7 +425,7 @@ export default component$(() => {
                 >
                   All
                 </button>
-                {categories.map((cat) => (
+                {topicCategories.map((cat) => (
                   <button
                     key={cat}
                     onClick$={() => { activeCategory.value = activeCategory.value === cat ? "" : cat; }}
@@ -407,8 +461,13 @@ export default component$(() => {
                           <div class="serif" style={{ fontSize: "17px", lineHeight: 1.2, letterSpacing: "-0.005em" }}>
                             {b.title}
                           </div>
-                          <div style={{ fontSize: "11.5px", color: "var(--color-ink-3)", marginTop: "3px" }}>
-                            {b.tags?.[0]?.name || category}
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11.5px", color: "var(--color-ink-3)", marginTop: "3px" }}>
+                            {b.tags?.find((t) => t.category === "Source") && (
+                              <span class="ln-source-badge" data-source={b.tags.find((t) => t.category === "Source")!.slug}>
+                                {b.tags.find((t) => t.category === "Source")!.name}
+                              </span>
+                            )}
+                            <span>{b.tags?.find((t) => t.category !== "Source")?.name || category}</span>
                           </div>
                         </div>
                         <div class="mono" style={{ fontSize: "11.5px", color: "var(--color-ink-3)" }}>
