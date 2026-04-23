@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/biswas-dev/learn/internal/embeddings"
+	"github.com/biswas-dev/learn/internal/models"
 	"github.com/biswas-dev/learn/internal/store"
 	"github.com/rs/zerolog/log"
 )
@@ -50,6 +51,7 @@ func truncate(s string, maxLen int) string {
 }
 
 // Search handles GET /api/search/semantic?q=...&limit=10
+// Results are filtered by the user's tag-based course access.
 func (h *SemanticSearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -71,6 +73,16 @@ func (h *SemanticSearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build the user's allowed course set
+	user := UserFromCtx(r.Context())
+	isAdmin := user != nil && user.Role == models.RoleAdmin
+
+	// For non-admins, build a set of accessible course IDs
+	var allowedCourses map[int64]bool
+	if !isAdmin && user != nil {
+		allowedCourses = h.buildAllowedCourses(r.Context(), user.ID)
+	}
+
 	vec, err := h.client.Embed(query)
 	if err != nil {
 		log.Error().Err(err).Str("query", query).Msg("embed query failed")
@@ -78,10 +90,21 @@ func (h *SemanticSearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hits := h.index.Search(vec, limit)
-	results := make([]semanticResult, len(hits))
-	for i, hit := range hits {
-		results[i] = semanticResult{
+	// Fetch more results than needed to account for filtering
+	rawHits := h.index.Search(vec, limit*5)
+
+	var results []semanticResult
+	for _, hit := range rawHits {
+		if len(results) >= limit {
+			break
+		}
+		// Filter: non-admin users only see courses they have tag access to
+		if !isAdmin && allowedCourses != nil {
+			if !allowedCourses[hit.CourseID] {
+				continue
+			}
+		}
+		results = append(results, semanticResult{
 			CourseTitle:  hit.CourseTitle,
 			PageTitle:    hit.PageTitle,
 			SectionTitle: hit.SectTitle,
@@ -89,7 +112,7 @@ func (h *SemanticSearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 			Score:        hit.Score,
 			URL:          "/courses/" + hit.CourseSlug + "/" + hit.SectSlug + "/" + hit.PageSlug,
 			CourseSlug:   hit.CourseSlug,
-		}
+		})
 	}
 
 	jsonResp(w, http.StatusOK, map[string]any{
@@ -97,6 +120,42 @@ func (h *SemanticSearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 		"results": results,
 		"total":   len(results),
 	})
+}
+
+// buildAllowedCourses returns the set of course IDs a user can access
+// based on their tag grants. Unprotected courses are always included.
+func (h *SemanticSearchHandler) buildAllowedCourses(ctx context.Context, userID int64) map[int64]bool {
+	sqlDB := h.store.(*store.SQLiteStore).DB()
+	allowed := make(map[int64]bool)
+
+	// All unprotected published courses
+	rows, err := sqlDB.QueryContext(ctx,
+		`SELECT id FROM courses WHERE is_published = 1 AND is_protected = 0`)
+	if err == nil {
+		for rows.Next() {
+			var id int64
+			rows.Scan(&id)
+			allowed[id] = true
+		}
+		rows.Close()
+	}
+
+	// Protected courses where user has a matching tag
+	rows, err = sqlDB.QueryContext(ctx, `
+		SELECT DISTINCT c.id FROM courses c
+		JOIN course_tags ct ON ct.course_id = c.id
+		JOIN user_tag_access uta ON uta.tag_id = ct.tag_id
+		WHERE c.is_published = 1 AND c.is_protected = 1 AND uta.user_id = ?`, userID)
+	if err == nil {
+		for rows.Next() {
+			var id int64
+			rows.Scan(&id)
+			allowed[id] = true
+		}
+		rows.Close()
+	}
+
+	return allowed
 }
 
 // Reindex handles POST /api/search/reindex — rebuilds the entire vector index.
