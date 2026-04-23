@@ -69,13 +69,15 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 		r.Get("/api/courses/{courseSlug}", courseH.GetBySlug)
 		r.Get("/api/courses/{courseSlug}/sections/{sectionSlug}/pages/{pageSlug}", pageH.GetPageContent)
 		r.Get("/api/tags", tagH.List)
-		r.Get("/api/search/semantic", searchH.Search)
-		r.Get("/api/search/semantic/status", searchH.Status)
 	})
 
 	// Authenticated routes
 	r.Group(func(r chi.Router) {
 		r.Use(JWTAuth(cfg.JWTSecret, s))
+
+		// Semantic search (any authenticated user)
+		r.Get("/api/search/semantic", searchH.Search)
+		r.Get("/api/search/semantic/status", searchH.Status)
 
 		r.Get("/api/me", authH.Me)
 		r.Post("/api/me/password", authH.ChangePassword)
