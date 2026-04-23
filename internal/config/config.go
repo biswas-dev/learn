@@ -22,6 +22,10 @@ type Config struct {
 	S3KeyID    string
 	S3AppKey   string
 	S3Bucket   string
+
+	// Ollama for semantic search embeddings
+	OllamaURL      string
+	EmbeddingModel string
 }
 
 // UseS3 returns true if S3 storage is configured.
@@ -44,6 +48,8 @@ func Load() (*Config, error) {
 		S3KeyID:       envStr("LEARN_S3_KEY_ID", ""),
 		S3AppKey:      envStr("LEARN_S3_APP_KEY", ""),
 		S3Bucket:      envStr("LEARN_S3_BUCKET", ""),
+		OllamaURL:      envStr("OLLAMA_URL", ""),
+		EmbeddingModel: envStr("EMBEDDING_MODEL", "all-minilm:l6-v2"),
 	}
 
 	if c.JWTSecret == "" {

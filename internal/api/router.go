@@ -10,6 +10,7 @@ import (
 
 	gowiki "github.com/anchoo2kewl/go-wiki"
 	"github.com/biswas-dev/learn/internal/config"
+	"github.com/biswas-dev/learn/internal/embeddings"
 	"github.com/biswas-dev/learn/internal/images"
 	"github.com/biswas-dev/learn/internal/models"
 	"github.com/biswas-dev/learn/internal/store"
@@ -19,7 +20,7 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler http.Handler, imgStore images.Store) http.Handler {
+func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler http.Handler, imgStore images.Store, embClient *embeddings.Client, embIndex *embeddings.Index) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -46,6 +47,7 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 	apikeyH := &APIKeyHandler{store: s}
 	dashH := &DashboardHandler{store: s}
 	tagH := &TagHandler{store: s}
+	searchH := &SemanticSearchHandler{store: s, client: embClient, index: embIndex}
 
 	// Health + version
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +69,8 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 		r.Get("/api/courses/{courseSlug}", courseH.GetBySlug)
 		r.Get("/api/courses/{courseSlug}/sections/{sectionSlug}/pages/{pageSlug}", pageH.GetPageContent)
 		r.Get("/api/tags", tagH.List)
+		r.Get("/api/search/semantic", searchH.Search)
+		r.Get("/api/search/semantic/status", searchH.Status)
 	})
 
 	// Authenticated routes
@@ -140,6 +144,7 @@ func NewRouter(s store.Store, cfg *config.Config, wiki *gowiki.Wiki, drawHandler
 			r.Patch("/api/admin/users/{userId}/role", adminH.UpdateUserRole)
 			r.Put("/api/admin/users/{userId}/tags", adminH.UpdateUserTagAccess)
 			r.Get("/api/admin/system-info", adminH.SystemInfo)
+			r.Post("/api/search/reindex", searchH.Reindex)
 		})
 	})
 

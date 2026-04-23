@@ -130,4 +130,13 @@ var migrations = []string{
 		title, description, tags,
 		content='', tokenize='porter unicode61'
 	)`,
+
+	// Page embeddings for semantic vector search
+	`CREATE TABLE IF NOT EXISTS page_embeddings (
+		page_id INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+		embedding BLOB NOT NULL,
+		embedding_model TEXT NOT NULL DEFAULT '',
+		snippet TEXT NOT NULL DEFAULT '',
+		embedded_at DATETIME NOT NULL DEFAULT (datetime('now'))
+	)`,
 }

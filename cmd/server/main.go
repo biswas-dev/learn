@@ -17,6 +17,7 @@ import (
 	godrawstore "github.com/anchoo2kewl/go-draw/store"
 	gowiki "github.com/anchoo2kewl/go-wiki"
 	"github.com/biswas-dev/learn/internal/api"
+	"github.com/biswas-dev/learn/internal/embeddings"
 	"github.com/biswas-dev/learn/internal/images"
 	"github.com/biswas-dev/learn/internal/auth"
 	"github.com/biswas-dev/learn/internal/config"
@@ -118,7 +119,20 @@ func main() {
 		log.Info().Str("dir", cfg.ImagesDir).Msg("using local image storage")
 	}
 
-	router := api.NewRouter(db, cfg, wiki, drawHandler, imgStore)
+	// Ollama embeddings (nil-safe if OLLAMA_URL not set)
+	embClient := embeddings.NewClient(cfg.OllamaURL, cfg.EmbeddingModel)
+	embIndex := embeddings.NewIndex()
+	if embClient != nil {
+		log.Info().Str("url", cfg.OllamaURL).Str("model", cfg.EmbeddingModel).Msg("ollama embeddings enabled")
+	}
+
+	router := api.NewRouter(db, cfg, wiki, drawHandler, imgStore, embClient, embIndex)
+
+	// Load existing embeddings from DB into in-memory index
+	if embClient != nil {
+		api.LoadEmbeddingsIndex(db, embIndex)
+	}
+
 	addr := ":" + strconv.Itoa(cfg.Port)
 
 	srv := &http.Server{
