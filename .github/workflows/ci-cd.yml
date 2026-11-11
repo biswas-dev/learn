@@ -22,6 +22,12 @@
 name: CI/CD Pipeline
 
 on:
+  workflow_dispatch:
+    inputs:
+      quality_only:
+        description: Run tests and publish reports without deploying applications
+        type: boolean
+        default: false
   push:
     branches: [main]
   pull_request:
@@ -52,15 +58,36 @@ jobs:
       - run: go vet ./...
 
       - name: Run tests
-        run: go test -v ./internal/...
+        run: go test -coverprofile=coverage.out -covermode=atomic -v ./internal/...
         timeout-minutes: 10
+
+      - name: Fetch verified report client
+        if: github.ref == 'refs/heads/main'
+        run: |
+          curl -fsS https://coverage.biswas.me/ci/report-v1.py -o /tmp/project-quality-report.py
+          echo '620701586b18553b55b6eb0bc964a7a0dcef82f04f989b9f010b18947ebc746a  /tmp/project-quality-report.py' | sha256sum --check --status
+      - name: Publish application coverage
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          COVERAGE_TOKEN: ${{ secrets.COVERAGE_TOKEN }}
+          COVERAGE_REPO: learn
+          COVERAGE_GROUP: learn
+          COVERAGE_LANGUAGE: go
+          COVERAGE_SOURCE_ROOT: ''
+        run: |
+          export COVERAGE_GO_MODULE=$(sed -n "s/^module //p" go.mod)
+          python3 /tmp/project-quality-report.py coverage coverage.out
+
+
 
   # ── Build x64 Image (native on prod runner) ───────────────────────────
   build-x64:
     name: "Build x64 Image"
     runs-on: [self-hosted, Linux, X64, prod]
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: >-
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') && inputs.quality_only != true
     outputs:
       digest: ${{ steps.build.outputs.digest }}
 
@@ -91,12 +118,14 @@ jobs:
 
           echo "Built and pushed $IMAGE:$TAG (x64) digest=$DIGEST"
 
+
   # ── Deploy Production ──────────────────────────────────────────────────
   deploy-production:
     name: "Deploy to Production"
     runs-on: [self-hosted, Linux, X64, prod]
     needs: build-x64
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: >-
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') && inputs.quality_only != true
     environment: production
 
     steps:
