@@ -1,0 +1,18 @@
+{
+  "repo": "learn",
+  "components": {
+    "application": {
+      "repo": "learn",
+      "file": "coverage.out",
+      "language": "go",
+      "root": "",
+      "token": "COVERAGE_TOKEN",
+      "label": "Application",
+      "module": "github.com/biswas-dev/learn"
+    }
+  },
+  "workflows": [
+    ".github/workflows/security.yml",
+    ".github/workflows/ci-cd.yml"
+  ]
+}
